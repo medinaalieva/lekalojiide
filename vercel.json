@@ -1,0 +1,40 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "frontend": {
+      "root": "frontend",
+      "framework": "nextjs",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "backend",
+          "format": "url",
+          "env": "INTERNAL_API_URL"
+        }
+      ]
+    },
+    "backend": {
+      "root": ".",
+      "runtime": "container",
+      "entrypoint": "Dockerfile"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/v1/:path*",
+      "destination": { "service": "backend" }
+    },
+    {
+      "source": "/health",
+      "destination": { "service": "backend" }
+    },
+    {
+      "source": "/health/ready",
+      "destination": { "service": "backend" }
+    },
+    {
+      "source": "/:path*",
+      "destination": { "service": "frontend" }
+    }
+  ]
+}

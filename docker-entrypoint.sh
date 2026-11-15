@@ -3,9 +3,9 @@ set -e
 
 echo "=== LEKALO ZHIIDE Backend Container Starting ==="
 
-# Apply pending database migrations automatically in production
-if [ "$RUN_MIGRATIONS" = "true" ] || [ "$NODE_ENV" = "production" ]; then
-  echo "--> Running Prisma database migrations..."
+# Apply pending database migrations only when explicitly requested (RUN_MIGRATIONS=true)
+if [ "$RUN_MIGRATIONS" = "true" ]; then
+  echo "--> Running Prisma database migrations (explicit RUN_MIGRATIONS=true)..."
   npx prisma migrate deploy || {
     echo "ERROR: Database migration failed. Check PostgreSQL connection."
     exit 1
@@ -13,9 +13,9 @@ if [ "$RUN_MIGRATIONS" = "true" ] || [ "$NODE_ENV" = "production" ]; then
   echo "--> Database migrations applied successfully."
 fi
 
-# Seed initial dictionaries if requested
+# Seed initial dictionaries only when explicitly requested (RUN_SEED=true)
 if [ "$RUN_SEED" = "true" ]; then
-  echo "--> Running database seed..."
+  echo "--> Running database seed (explicit RUN_SEED=true)..."
   npx prisma db seed || echo "WARN: Database seed encountered an issue (may already be seeded)."
 fi
 
