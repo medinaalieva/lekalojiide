@@ -14,6 +14,7 @@ const DEV_ORIGINS = [
 ];
 
 const DEFAULT_ALLOWED_ORIGINS = [
+  "https://lekalojiide.vercel.app",
   "https://lekalo-zhiide.kg",
   "https://www.lekalo-zhiide.kg",
   "https://admin.lekalo-zhiide.kg",
@@ -22,27 +23,34 @@ const DEFAULT_ALLOWED_ORIGINS = [
 
 export function getAllowedOrigins(): string[] {
   const envOrigins = process.env.ALLOWED_ORIGINS;
-  let origins: string[];
+  const origins = new Set<string>(DEFAULT_ALLOWED_ORIGINS);
 
   if (envOrigins) {
-    origins = envOrigins
+    envOrigins
       .split(",")
       .map((o) => o.trim())
-      .filter(Boolean);
-  } else {
-    origins = [...DEFAULT_ALLOWED_ORIGINS];
+      .filter(Boolean)
+      .forEach((o) => origins.add(o));
+  }
+
+  // Поддержка системных доменов Vercel Deployment
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    const prodHost = process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/^https?:\/\//, "");
+    origins.add(`https://${prodHost}`);
+  }
+  if (process.env.VERCEL_URL) {
+    const vercelHost = process.env.VERCEL_URL.replace(/^https?:\/\//, "");
+    origins.add(`https://${vercelHost}`);
   }
 
   // В dev-окружении гарантируем сохранение локальных адресов разработки
   if (process.env.NODE_ENV !== "production") {
     for (const devOrigin of DEV_ORIGINS) {
-      if (!origins.includes(devOrigin)) {
-        origins.push(devOrigin);
-      }
+      origins.add(devOrigin);
     }
   }
 
-  return origins;
+  return Array.from(origins);
 }
 
 /**
@@ -72,11 +80,7 @@ export function isAllowedOrigin(origin?: string): boolean {
 export function getCorsOptions() {
   return {
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      if (isAllowedOrigin(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS blocked for origin: ${origin}`));
-      }
+      callback(null, isAllowedOrigin(origin));
     },
     credentials: true, // Критично для передачи HttpOnly cookie
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],

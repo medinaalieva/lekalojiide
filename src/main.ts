@@ -3,7 +3,7 @@ import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, NestFastifyApplication } from "@nestjs/platform-fastify";
 import fastifyCookie from "@fastify/cookie";
 import { AppModule } from "./app.module";
-import { getAllowedOrigins } from "./config/http.config";
+import { isAllowedOrigin, getAllowedOrigins } from "./config/http.config";
 import { AppExceptionFilter } from "./common/filters/app-exception.filter";
 
 /**
@@ -31,22 +31,13 @@ async function bootstrap(): Promise<NestFastifyApplication> {
   // Настройка CORS с использованием доверенных Origin из http.config.ts
   app.enableCors({
     origin: (origin, callback) => {
-      if (!origin) {
-        return callback(null, true);
-      }
-      const allowedOrigins = getAllowedOrigins();
-      const isAllowed = allowedOrigins.some((allowed) => {
-        try {
-          return new URL(allowed).origin === new URL(origin).origin;
-        } catch {
-          return allowed === origin;
-        }
-      });
-      callback(null, isAllowed);
+      callback(null, isAllowedOrigin(origin));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-Token"],
+    exposedHeaders: ["Set-Cookie"],
+    maxAge: 86400,
   });
 
   // Корректное завершение приложения при SIGINT / SIGTERM (Graceful Shutdown)

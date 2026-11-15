@@ -10,6 +10,7 @@ import { AuthService } from "../src/modules/auth/auth.service";
 import { PrismaService } from "../src/lib/prisma.service";
 import { AppExceptionFilter } from "../src/common/filters/app-exception.filter";
 import { REFRESH_TOKEN_COOKIE_NAME } from "../src/utils/cookies";
+import { isAllowedOrigin } from "../src/config/http.config";
 
 // Mock-хранилище базы данных для изолированного HTTP-тестирования контроллеров NestJS
 function createMockPrisma() {
@@ -144,6 +145,15 @@ async function createTestApp() {
   await app.register(fastifyCookie as any);
   app.setGlobalPrefix("api/v1");
   app.useGlobalFilters(new AppExceptionFilter());
+  app.enableCors({
+    origin: (origin, callback) => {
+      callback(null, isAllowedOrigin(origin));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-Token"],
+    exposedHeaders: ["Set-Cookie"],
+  });
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
 
@@ -317,6 +327,42 @@ test("HTTP Auth: CSRF / Origin violation returns 403 Forbidden", async () => {
   const json = JSON.parse(response.body);
   assert.strictEqual(json.success, false);
   assert.strictEqual(json.error.code, "CSRF_VIOLATION");
+
+  await app.close();
+});
+
+test("HTTP Auth: Allowed Production Origin (https://lekalojiide.vercel.app) passes CORS and CSRF", async () => {
+  const { app } = await createTestApp();
+
+  // 1. Проверка preflight OPTIONS
+  const optionsRes = await app.inject({
+    method: "OPTIONS",
+    url: "/api/v1/auth/register",
+    headers: {
+      origin: "https://lekalojiide.vercel.app",
+      "access-control-request-method": "POST",
+      "access-control-request-headers": "content-type",
+    },
+  });
+  assert.strictEqual(optionsRes.statusCode, 204);
+  assert.strictEqual(optionsRes.headers["access-control-allow-origin"], "https://lekalojiide.vercel.app");
+
+  // 2. Проверка POST-запроса регистрации с продакшн Origin
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/v1/auth/register",
+    headers: { origin: "https://lekalojiide.vercel.app" },
+    payload: {
+      email: "production_allowed@lekalo.kg",
+      password: "Password123!",
+      fullName: "Production User",
+    },
+  });
+
+  assert.strictEqual(response.statusCode, 201);
+  const json = JSON.parse(response.body);
+  assert.strictEqual(json.success, true);
+  assert.strictEqual(response.headers["access-control-allow-origin"], "https://lekalojiide.vercel.app");
 
   await app.close();
 });

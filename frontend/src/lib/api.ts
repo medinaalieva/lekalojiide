@@ -45,7 +45,7 @@ export async function apiRequest<T = any>(
   }
 
   const response = await fetch(url, {
-    credentials: "same-origin",
+    credentials: "include",
     ...rest,
     headers: requestHeaders,
   });
