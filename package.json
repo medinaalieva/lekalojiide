@@ -1,0 +1,45 @@
+{
+  "name": "lekalo-zhiide",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LEKALO ZHIIDE — Интернет-магазин цифровых выкроек одежды в формате PDF",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "ts-node src/main.ts",
+    "start:prod": "node dist/main.js",
+    "prisma:validate": "prisma validate",
+    "prisma:generate": "prisma generate",
+    "prisma:seed": "ts-node prisma/seed.ts",
+    "test": "ts-node tests/auth.test.ts && ts-node tests/health.test.ts && ts-node tests/auth-http.test.ts && ts-node tests/catalog.test.ts && ts-node tests/catalog-e2e.test.ts && ts-node tests/cart-orders.test.ts && ts-node tests/cart-orders-e2e.test.ts && ts-node tests/payment.test.ts && ts-node tests/payment-e2e.test.ts && ts-node tests/cabinet.test.ts && ts-node tests/cabinet-e2e.test.ts",
+    "test:catalog": "ts-node tests/catalog.test.ts && ts-node tests/catalog-e2e.test.ts",
+    "test:cart-orders": "ts-node tests/cart-orders.test.ts && ts-node tests/cart-orders-e2e.test.ts",
+    "test:payments": "ts-node tests/payment.test.ts && ts-node tests/payment-e2e.test.ts",
+    "test:cabinet": "ts-node tests/cabinet.test.ts && ts-node tests/cabinet-e2e.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^9.4.0",
+    "@nestjs/common": "^10.4.15",
+    "@nestjs/core": "^10.4.15",
+    "@nestjs/platform-fastify": "^10.4.15",
+    "@prisma/client": "^5.22.0",
+    "argon2": "^0.45.2",
+    "jsonwebtoken": "^9.0.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^18.19.64",
+    "prisma": "^5.22.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=18.12.0"
+  }
+}

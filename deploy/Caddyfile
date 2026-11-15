@@ -1,0 +1,47 @@
+{
+    email {$CADDY_ACME_EMAIL:admin@lekalo-zhiide.kg}
+    admin off
+}
+
+# Публичный домен или fallback на localhost при тестировании
+{$DOMAIN:localhost} {
+    encode gzip zstd
+
+    # Заголовки безопасности
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Маршруты Backend API
+    handle /api/v1/* {
+        reverse_proxy backend:4000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Системные пробы здоровья (Liveness & Readiness)
+    handle /health* {
+        reverse_proxy backend:4000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Маршруты пользовательского интерфейса (Next.js SSR & Static)
+    handle {
+        reverse_proxy frontend:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+}

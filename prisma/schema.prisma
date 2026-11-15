@@ -1,0 +1,506 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// 1. ПОЛЬЗОВАТЕЛИ И АУТЕНТИФИКАЦИЯ
+// ==========================================
+
+enum Role {
+  CUSTOMER
+  CONTENT_MANAGER
+  ADMIN
+}
+
+model User {
+  id              String   @id @default(uuid()) @db.Uuid
+  email           String   @unique @db.VarChar(255)
+  passwordHash    String?  @map("password_hash") @db.VarChar(255)
+  role            Role     @default(CUSTOMER)
+  firstName       String?  @map("first_name") @db.VarChar(100)
+  lastName        String?  @map("last_name") @db.VarChar(100)
+  phone           String?  @db.VarChar(50)
+  isEmailVerified Boolean  @default(false) @map("is_email_verified")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Связи
+  sessions        UserSession[]
+  orders          Order[]
+  carts           Cart[]
+  entitlements    PurchaseEntitlement[]
+  downloadLogs    DownloadLog[]
+  auditLogs       AuditLog[]
+  refundsCreated  Refund[]              @relation("RefundCreatedByUser")
+
+  @@map("users")
+}
+
+model UserSession {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String   @unique @map("refresh_token_hash") @db.VarChar(255)
+  ipAddress        String?  @map("ip_address") @db.VarChar(45)
+  userAgent        String?  @map("user_agent") @db.Text
+  isRevoked        Boolean  @default(false) @map("is_revoked")
+  expiresAt        DateTime @map("expires_at") @db.Timestamptz
+  lastActiveAt     DateTime @default(now()) @map("last_active_at") @db.Timestamptz
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("user_sessions")
+}
+
+// ==========================================
+// 2. КАТАЛОГ И КАТЕГОРИИ
+// ==========================================
+
+model Category {
+  id           String     @id @default(uuid()) @db.Uuid
+  parentId     String?    @map("parent_id") @db.Uuid
+  parent       Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children     Category[] @relation("CategoryHierarchy")
+  title        String     @db.VarChar(150)
+  slug         String     @unique @db.VarChar(150)
+  description  String?    @db.Text
+  displayOrder Int        @default(0) @map("display_order")
+  isActive     Boolean    @default(true) @map("is_active")
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Связи
+  products     Product[]
+
+  @@map("categories")
+}
+
+enum DifficultyLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+model Product {
+  id               String          @id @default(uuid()) @db.Uuid
+  categoryId       String          @map("category_id") @db.Uuid
+  category         Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  title            String          @db.VarChar(255)
+  slug             String          @unique @db.VarChar(255)
+  description      String          @db.Text
+  shortDescription String?         @map("short_description") @db.Text
+  basePrice        Decimal         @map("base_price") @db.Decimal(12, 2)
+  difficultyLevel  DifficultyLevel @default(INTERMEDIATE) @map("difficulty_level")
+  fabricDetails    Json?           @map("fabric_details")
+  isActive         Boolean         @default(true) @map("is_active")
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Связи
+  images           ProductImage[]
+  instructions     ProductInstruction[]
+  variants         ProductVariant[]
+
+  @@map("products")
+}
+
+model ProductImage {
+  id           String   @id @default(uuid()) @db.Uuid
+  productId    String   @map("product_id") @db.Uuid
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  imageUrl     String   @map("image_url") @db.VarChar(1000)
+  altText      String?  @map("alt_text") @db.VarChar(255)
+  displayOrder Int      @default(0) @map("display_order")
+  isCover      Boolean  @default(false) @map("is_cover")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("product_images")
+}
+
+model ProductInstruction {
+  id             String   @id @default(uuid()) @db.Uuid
+  productId      String   @map("product_id") @db.Uuid
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  title          String   @db.VarChar(255)
+  s3Bucket       String   @map("s3_bucket") @db.VarChar(100)
+  s3Key          String   @map("s3_key") @db.VarChar(500)
+  fileName       String   @map("file_name") @db.VarChar(255)
+  fileSizeBytes  BigInt   @map("file_size_bytes")
+  checksumSha256 String   @map("checksum_sha256") @db.VarChar(64)
+  version        Int      @default(1)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("product_instructions")
+}
+
+// ==========================================
+// 3. СПРАВОЧНИКИ АТРИБУТОВ (Размеры, Роста, Форматы)
+// ==========================================
+
+model Size {
+  id           String           @id @default(uuid()) @db.Uuid
+  code         String           @unique @db.VarChar(30)
+  label        String           @db.VarChar(100)
+  displayOrder Int              @default(0) @map("display_order")
+  variants     ProductVariant[]
+
+  @@map("sizes")
+}
+
+model Height {
+  id           String           @id @default(uuid()) @db.Uuid
+  code         String           @unique @db.VarChar(30)
+  label        String           @db.VarChar(100)
+  displayOrder Int              @default(0) @map("display_order")
+  variants     ProductVariant[]
+
+  @@map("heights")
+}
+
+model Format {
+  id           String           @id @default(uuid()) @db.Uuid
+  code         String           @unique @db.VarChar(30)
+  label        String           @db.VarChar(100)
+  description  String?          @db.Text
+  displayOrder Int              @default(0) @map("display_order")
+  variants     ProductVariant[]
+
+  @@map("formats")
+}
+
+// ==========================================
+// 4. МАТРИЦА ВАРИАНТОВ И ФАЙЛЫ
+// ==========================================
+
+model ProductVariant {
+  id            String   @id @default(uuid()) @db.Uuid
+  productId     String   @map("product_id") @db.Uuid
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  sizeId        String   @map("size_id") @db.Uuid
+  size          Size     @relation(fields: [sizeId], references: [id], onDelete: Restrict)
+  heightId      String   @map("height_id") @db.Uuid
+  height        Height   @relation(fields: [heightId], references: [id], onDelete: Restrict)
+  formatId      String   @map("format_id") @db.Uuid
+  format        Format   @relation(fields: [formatId], references: [id], onDelete: Restrict)
+  sku           String   @unique @db.VarChar(100)
+  priceOverride Decimal? @map("price_override") @db.Decimal(12, 2)
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Связи
+  digitalFiles         DigitalFile[]
+  cartItems            CartItem[]
+  orderItems           OrderItem[]
+  purchaseEntitlements PurchaseEntitlement[]
+
+  @@unique([productId, sizeId, heightId, formatId], name: "product_size_height_format_unique")
+  @@map("product_variants")
+}
+
+enum FileType {
+  PATTERN
+  TEST_SQUARE
+  LAYOUT
+}
+
+model DigitalFile {
+  id               String      @id @default(uuid()) @db.Uuid
+  variantId        String      @map("variant_id") @db.Uuid
+  variant          ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  currentVersionId String?     @map("current_version_id") @db.Uuid
+  currentVersion   FileVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: Restrict)
+  fileType         FileType    @default(PATTERN) @map("file_type")
+  title            String      @db.VarChar(255)
+  isActive         Boolean     @default(true) @map("is_active")
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Связи
+  versions         FileVersion[] @relation("AllVersions")
+
+  @@map("digital_files")
+}
+
+model FileVersion {
+  id               String       @id @default(uuid()) @db.Uuid
+  digitalFileId    String       @map("digital_file_id") @db.Uuid
+  digitalFile      DigitalFile  @relation("AllVersions", fields: [digitalFileId], references: [id], onDelete: Restrict)
+  versionNumber    Int          @map("version_number")
+  s3Bucket         String       @map("s3_bucket") @db.VarChar(100)
+  s3Key            String       @map("s3_key") @db.VarChar(500)
+  originalFileName String       @map("original_file_name") @db.VarChar(255)
+  fileSizeBytes    BigInt       @map("file_size_bytes")
+  mimeType         String       @default("application/pdf") @map("mime_type") @db.VarChar(100)
+  checksumSha256   String       @map("checksum_sha256") @db.VarChar(64)
+  changelog        String?      @db.Text
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  // Связи
+  downloadLogs        DownloadLog[]
+  currentVersionFiles DigitalFile[] @relation("CurrentVersion")
+
+  @@unique([digitalFileId, versionNumber])
+  @@map("file_versions")
+}
+
+// ==========================================
+// 5. КОРЗИНА
+// ==========================================
+
+model Cart {
+  id         String     @id @default(uuid()) @db.Uuid
+  userId     String?    @map("user_id") @db.Uuid
+  user       User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guestToken String?    @unique @map("guest_token") @db.VarChar(100)
+  expiresAt  DateTime   @map("expires_at") @db.Timestamptz
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Связи
+  items      CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id               String         @id @default(uuid()) @db.Uuid
+  cartId           String         @map("cart_id") @db.Uuid
+  cart             Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productVariantId String         @map("product_variant_id") @db.Uuid
+  variant          ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([cartId, productVariantId])
+  @@map("cart_items")
+}
+
+// ==========================================
+// 6. ЗАКАЗЫ И ПОЗИЦИИ
+// ==========================================
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PARTIALLY_REFUNDED
+  REFUNDED
+  CANCELLED
+}
+
+model Order {
+  id            String      @id @default(uuid()) @db.Uuid
+  orderNumber   String      @unique @map("order_number") @db.VarChar(32)
+  userId        String?     @map("user_id") @db.Uuid
+  user          User?       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  customerEmail String      @map("customer_email") @db.VarChar(255)
+  customerName  String      @map("customer_name") @db.VarChar(255)
+  customerPhone String?     @map("customer_phone") @db.VarChar(50)
+  totalAmount   Decimal     @map("total_amount") @db.Decimal(12, 2)
+  currency      String      @default("KGS") @db.VarChar(10)
+  status        OrderStatus @default(PENDING)
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Связи
+  items         OrderItem[]
+  payments      Payment[]
+  refunds       Refund[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id               String         @id @default(uuid()) @db.Uuid
+  orderId          String         @map("order_id") @db.Uuid
+  order            Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  productVariantId String         @map("product_variant_id") @db.Uuid
+  variant          ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  priceAtPurchase  Decimal        @map("price_at_purchase") @db.Decimal(12, 2)
+  productSnapshot  Json           @map("product_snapshot")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  // Связи
+  entitlement      PurchaseEntitlement?
+  refundItems      RefundItem[]
+
+  @@map("order_items")
+}
+
+// ==========================================
+// 7. ПЛАТЕЖИ, ВЕБХУКИ И ВОЗВРАТЫ
+// ==========================================
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+model Payment {
+  id             String        @id @default(uuid()) @db.Uuid
+  orderId        String        @map("order_id") @db.Uuid
+  order          Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  paymentGateway String        @map("payment_gateway") @db.VarChar(50)
+  externalId     String?       @unique @map("external_id") @db.VarChar(100)
+  idempotencyKey String        @unique @map("idempotency_key") @db.VarChar(100)
+  amount         Decimal       @db.Decimal(12, 2)
+  currency       String        @default("KGS") @db.VarChar(10)
+  status         PaymentStatus @default(PENDING)
+  gatewayPayload Json?         @map("gateway_payload")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Связи
+  webhookEvents  PaymentWebhookEvent[]
+  refunds        Refund[]
+
+  @@map("payments")
+}
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+model PaymentWebhookEvent {
+  id              String        @id @default(uuid()) @db.Uuid
+  paymentGateway  String        @map("payment_gateway") @db.VarChar(50)
+  eventType       String?       @map("event_type") @db.VarChar(100)
+  externalEventId String?       @map("external_event_id") @db.VarChar(100)
+  paymentId       String?       @map("payment_id") @db.Uuid
+  payment         Payment?      @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  headers         Json
+  rawPayload      Json          @map("raw_payload")
+  status          WebhookStatus @default(RECEIVED)
+  errorMessage    String?       @map("error_message") @db.Text
+  retryCount      Int           @default(0) @map("retry_count")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  processedAt     DateTime?     @map("processed_at") @db.Timestamptz
+
+  @@map("payment_webhook_events")
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+model Refund {
+  id               String       @id @default(uuid()) @db.Uuid
+  orderId          String       @map("order_id") @db.Uuid
+  order            Order        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  paymentId        String       @map("payment_id") @db.Uuid
+  payment          Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  externalRefundId String?      @unique @map("external_refund_id") @db.VarChar(100)
+  amount           Decimal      @db.Decimal(12, 2)
+  currency         String       @default("KGS") @db.VarChar(10)
+  status           RefundStatus @default(PENDING)
+  reason           String?      @db.Text
+  createdByUserId  String       @map("created_by_user_id") @db.Uuid
+  createdByUser    User         @relation("RefundCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Связи
+  items            RefundItem[]
+
+  @@map("refunds")
+}
+
+model RefundItem {
+  id          String    @id @default(uuid()) @db.Uuid
+  refundId    String    @map("refund_id") @db.Uuid
+  refund      Refund    @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  orderItemId String    @map("order_item_id") @db.Uuid
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  amount      Decimal   @db.Decimal(12, 2)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("refund_items")
+}
+
+// ==========================================
+// 8. ЦИФРОВЫЕ ПРАВА И СКАЧИВАНИЯ
+// ==========================================
+
+enum EntitlementStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+model PurchaseEntitlement {
+  id            String            @id @default(uuid()) @db.Uuid
+  userId        String            @map("user_id") @db.Uuid
+  user          User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  orderItemId   String            @unique @map("order_item_id") @db.Uuid
+  orderItem     OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  variantId     String            @map("variant_id") @db.Uuid
+  variant       ProductVariant    @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  status        EntitlementStatus @default(ACTIVE)
+  downloadCount Int               @default(0) @map("download_count")
+  maxDownloads  Int?              @map("max_downloads")
+  expiresAt     DateTime?         @map("expires_at") @db.Timestamptz
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Связи
+  downloadLogs  DownloadLog[]
+
+  @@map("purchase_entitlements")
+}
+
+model DownloadLog {
+  id            String              @id @default(uuid()) @db.Uuid
+  entitlementId String              @map("entitlement_id") @db.Uuid
+  entitlement   PurchaseEntitlement @relation(fields: [entitlementId], references: [id], onDelete: Restrict)
+  userId        String              @map("user_id") @db.Uuid
+  user          User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  fileVersionId String              @map("file_version_id") @db.Uuid
+  fileVersion   FileVersion         @relation(fields: [fileVersionId], references: [id], onDelete: Restrict)
+  ipAddress     String?             @map("ip_address") @db.VarChar(45)
+  userAgent     String?             @map("user_agent") @db.Text
+  downloadedAt  DateTime            @default(now()) @map("downloaded_at") @db.Timestamptz
+
+  @@map("download_logs")
+}
+
+// ==========================================
+// 9. СИСТЕМНЫЙ АУДИТ
+// ==========================================
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  REFUND
+  DOWNLOAD
+}
+
+model AuditLog {
+  id          String      @id @default(uuid()) @db.Uuid
+  actorId     String?     @map("actor_id") @db.Uuid
+  actor       User?       @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  actorRole   String?     @map("actor_role") @db.VarChar(50)
+  action      AuditAction
+  entityType  String      @map("entity_type") @db.VarChar(100)
+  entityId    String?     @map("entity_id") @db.Uuid
+  changesDiff Json?       @map("changes_diff")
+  ipAddress   String?     @map("ip_address") @db.VarChar(45)
+  userAgent   String?     @map("user_agent") @db.Text
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("audit_logs")
+}

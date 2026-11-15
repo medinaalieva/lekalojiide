@@ -1,0 +1,132 @@
+# ==============================================================================
+# LEKALO ZHIIDE — PRODUCTION DOCKER COMPOSE CONFIGURATION
+# Стек: PostgreSQL 16 + NestJS Fastify + Next.js 13 Standalone + Caddy SSL
+# ==============================================================================
+
+version: "3.8"
+
+networks:
+  lekalo_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: lekalo_postgres_data
+  caddy_data:
+    name: lekalo_caddy_data
+  caddy_config:
+    name: lekalo_caddy_config
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Реляционная база данных PostgreSQL 16
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: lekalo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Error: POSTGRES_PASSWORD must be provided in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-lekalo_zhiide}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-lekalo_zhiide}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - lekalo_network
+
+  # ----------------------------------------------------------------------------
+  # 2. Backend API (NestJS + Fastify + Prisma ORM)
+  # ----------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lekalo-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lekalo_zhiide}?schema=public"
+      JWT_SECRET: ${JWT_SECRET:?Error: JWT_SECRET must be set in .env with length >= 32}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      JWT_ISSUER: ${JWT_ISSUER:-lekalo-zhiide-api}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-lekalo-zhiide-client}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://${DOMAIN:-lekalo-zhiide.kg}}
+      DEFAULT_CURRENCY: ${DEFAULT_CURRENCY:-KGS}
+      PAYMENT_GATEWAY: ${PAYMENT_GATEWAY:-mock}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-lekalo-zhiide-mock-payment-webhook-secret-key-32chars}
+      STORAGE_SIGNING_SECRET: ${STORAGE_SIGNING_SECRET:-lekalo-zhiide-mock-storage-signing-secret-key-32chars}
+      RUN_MIGRATIONS: "true"
+      RUN_SEED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:4000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+    networks:
+      - lekalo_network
+
+  # ----------------------------------------------------------------------------
+  # 3. Frontend UI (Next.js 13 Standalone Server)
+  # ----------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        INTERNAL_API_URL: "http://backend:4000"
+        NEXT_PUBLIC_API_URL: "https://${DOMAIN:-lekalo-zhiide.kg}"
+    container_name: lekalo-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      INTERNAL_API_URL: "http://backend:4000"
+      NEXT_PUBLIC_API_URL: "https://${DOMAIN:-lekalo-zhiide.kg}"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - lekalo_network
+
+  # ----------------------------------------------------------------------------
+  # 4. Обратный прокси Caddy (Автоматический Let's Encrypt SSL)
+  # ----------------------------------------------------------------------------
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: lekalo-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:-admin@lekalo-zhiide.kg}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    networks:
+      - lekalo_network

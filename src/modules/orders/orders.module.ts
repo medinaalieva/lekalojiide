@@ -1,0 +1,14 @@
+import { Module } from "@nestjs/common";
+import { OrdersController } from "./orders.controller";
+import { OrdersAdminController } from "./orders-admin.controller";
+import { OrdersService } from "./orders.service";
+import { PrismaModule } from "../../lib/prisma.module";
+import { PaymentsModule } from "../payments/payments.module";
+
+@Module({
+  imports: [PrismaModule, PaymentsModule],
+  controllers: [OrdersController, OrdersAdminController],
+  providers: [OrdersService],
+  exports: [OrdersService],
+})
+export class OrdersModule {}
