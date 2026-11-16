@@ -8,7 +8,7 @@ function cn(...inputs: any[]) {
 }
 
 interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  variant?: "default" | "secondary" | "outline" | "success" | "warning";
+  variant?: "default" | "secondary" | "outline" | "success" | "warning" | "danger" | "neutral";
 }
 
 export function Badge({
@@ -23,6 +23,8 @@ export function Badge({
     outline: "text-atelier-charcoal border border-atelier-border bg-transparent",
     success: "bg-emerald-50 text-emerald-800 border-emerald-200",
     warning: "bg-amber-50 text-amber-800 border-amber-200",
+    danger: "bg-red-50 text-red-800 border-red-200",
+    neutral: "bg-gray-100 text-gray-700 border-gray-200",
   };
 
   return (

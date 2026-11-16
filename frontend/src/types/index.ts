@@ -6,11 +6,19 @@ export type PaymentStatus = "PENDING" | "PAID" | "FAILED" | "EXPIRED" | "CANCELL
 export interface User {
   id: string;
   email: string;
-  role: "CUSTOMER" | "ADMIN" | "DESIGNER";
+  role: "CUSTOMER" | "CONTENT_MANAGER" | "ADMIN" | "DESIGNER";
   firstName?: string | null;
   lastName?: string | null;
   phone?: string | null;
+  isEmailVerified?: boolean;
+  isActive?: boolean;
   createdAt?: string;
+  updatedAt?: string;
+  _count?: {
+    orders?: number;
+    entitlements?: number;
+    sessions?: number;
+  };
 }
 
 export interface Category {
@@ -236,4 +244,59 @@ export interface DownloadUrlResponse {
   expiresInSeconds?: number;
   fileSize?: number;
   remainingDownloads?: number;
+}
+
+export interface DashboardStats {
+  products: {
+    total: number;
+    published: number;
+    draft: number;
+  };
+  categories: {
+    total: number;
+  };
+  orders: {
+    total: number;
+    paid: number;
+    pending: number;
+  };
+  revenue: {
+    totalAmount: number;
+    currency: string;
+  };
+  users: {
+    total: number;
+  };
+  recentOrders: Array<{
+    id: string;
+    orderNumber: string;
+    customerEmail: string;
+    totalAmount: number;
+    currency: string;
+    status: OrderStatus;
+    createdAt: string;
+    _count?: { items: number };
+  }>;
+  recentUsers: Array<{
+    id: string;
+    email: string;
+    role: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    isActive: boolean;
+    createdAt: string;
+  }>;
+}
+
+export interface AdminPaymentWebhookEvent {
+  id: string;
+  gateway: string;
+  eventType: string;
+  externalPaymentId?: string | null;
+  signature?: string | null;
+  status: string;
+  processedAt?: string | null;
+  errorMessage?: string | null;
+  createdAt: string;
+  rawPayload?: any;
 }

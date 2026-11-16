@@ -109,6 +109,15 @@ export function Navbar() {
                   }`}
                 >
                   <div className="bg-white border border-atelier-border rounded-sm shadow-lg py-2 text-sm">
+                    {user.role === "ADMIN" && (
+                      <Link
+                        href="/admin"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="block px-4 py-2 text-brand-900 bg-brand-50 hover:bg-brand-100 font-semibold border-b border-brand-100"
+                      >
+                        ⚙️ Панель администратора
+                      </Link>
+                    )}
                     <Link
                       href="/cabinet"
                       onClick={() => setUserMenuOpen(false)}
@@ -177,6 +186,15 @@ export function Navbar() {
           </Link>
           {user ? (
             <>
+              {user.role === "ADMIN" && (
+                <Link
+                  href="/admin"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block text-sm uppercase tracking-wider text-brand-900 bg-brand-50 px-2 py-2 rounded-sm font-bold border border-brand-200"
+                >
+                  ⚙️ Панель администратора
+                </Link>
+              )}
               <Link
                 href="/cabinet/library"
                 onClick={() => setMobileMenuOpen(false)}
