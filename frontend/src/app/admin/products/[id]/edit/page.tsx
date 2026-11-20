@@ -48,6 +48,8 @@ export default function AdminEditProductPage({
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [selectedMainCategoryId, setSelectedMainCategoryId] = useState("");
+  const [selectedSubcategoryId, setSelectedSubcategoryId] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [difficultyLevel, setDifficultyLevel] = useState<DifficultyLevel>("INTERMEDIATE");
   const [shortDescription, setShortDescription] = useState("");
@@ -88,25 +90,89 @@ export default function AdminEditProductPage({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  // Derived categories hierarchy
+  const { mainCategories, subcategoriesByParent } = React.useMemo(() => {
+    const mains: Category[] = [];
+    const subMap: Record<string, Category[]> = {};
+
+    categories.forEach((cat) => {
+      if (!cat.parentId) {
+        mains.push(cat);
+        if (cat.children && cat.children.length > 0) {
+          subMap[cat.id] = [...cat.children];
+        }
+      } else {
+        if (!subMap[cat.parentId]) {
+          subMap[cat.parentId] = [];
+        }
+        if (!subMap[cat.parentId].some((c) => c.id === cat.id)) {
+          subMap[cat.parentId].push(cat);
+        }
+      }
+    });
+
+    return {
+      mainCategories: mains.sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)),
+      subcategoriesByParent: subMap,
+    };
+  }, [categories]);
+
+  const availableSubcategories = React.useMemo(() => {
+    return subcategoriesByParent[selectedMainCategoryId] || [];
+  }, [subcategoriesByParent, selectedMainCategoryId]);
+
   // Fetch product and categories
   const fetchData = async () => {
     setIsLoading(true);
     setLoadError(null);
     try {
+      let catData: Category[] = [];
+      try {
+        const adminCatRes = await api.get<{ success: boolean; data: Category[] }>("/api/v1/admin/categories");
+        if (adminCatRes.success && adminCatRes.data && adminCatRes.data.length > 0) {
+          catData = adminCatRes.data;
+        }
+      } catch {
+        // ignore
+      }
+
       const [prodRes, catRes] = await Promise.all([
         api.get<{ success: boolean; data: any }>(`/api/v1/admin/products/${productId}`),
-        api.get<{ success: boolean; data: Category[] }>("/api/v1/catalog/categories"),
+        catData.length === 0
+          ? api.get<{ success: boolean; data: Category[] }>("/api/v1/catalog/categories")
+          : Promise.resolve({ success: true, data: catData }),
       ]);
 
-      if (catRes.success && catRes.data) {
-        setCategories(catRes.data);
+      const resolvedCats = catData.length > 0 ? catData : (catRes.data || []);
+      if (resolvedCats.length > 0) {
+        setCategories(resolvedCats);
       }
 
       if (prodRes.success && prodRes.data) {
         const p = prodRes.data;
         setTitle(p.title || "");
         setSlug(p.slug || "");
-        setCategoryId(p.categoryId || (p.category?.id) || "");
+
+        // Category determination
+        const currentCatId = p.categoryId || (p.category?.id) || "";
+        setCategoryId(currentCatId);
+
+        // Pre-populate main and sub categories
+        if (p.category?.parentId) {
+          setSelectedMainCategoryId(p.category.parentId);
+          setSelectedSubcategoryId(p.category.id);
+        } else if (currentCatId) {
+          const parentOfCat = resolvedCats.find((c) =>
+            c.children?.some((ch) => ch.id === currentCatId)
+          );
+          if (parentOfCat) {
+            setSelectedMainCategoryId(parentOfCat.id);
+            setSelectedSubcategoryId(currentCatId);
+          } else {
+            setSelectedMainCategoryId(currentCatId);
+            setSelectedSubcategoryId("");
+          }
+        }
         setIsActive(p.isActive !== false);
         setDifficultyLevel(p.difficultyLevel || "INTERMEDIATE");
         setShortDescription(p.shortDescription || "");
@@ -292,10 +358,17 @@ export default function AdminEditProductPage({
         measurements: measurements.trim(),
       };
 
+      const targetCategoryId = selectedSubcategoryId || selectedMainCategoryId || categoryId;
+      if (!targetCategoryId) {
+        setError("Пожалуйста, выберите категорию для выкройки");
+        setIsSubmitting(false);
+        return;
+      }
+
       const payload: any = {
         title: title.trim(),
         slug: slug.trim().toLowerCase(),
-        categoryId: categoryId || undefined,
+        categoryId: targetCategoryId,
         basePrice: parsedBasePrice,
         bundlePrice: hasBundleOption && bundlePrice ? parseFloat(bundlePrice) || null : null,
         hasBundleOption,
@@ -467,20 +540,33 @@ export default function AdminEditProductPage({
                 </div>
               </div>
 
+              {/* Двухуровневый выбор категории: Основная -> Подкатегория */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-atelier-charcoal mb-1">
-                    Категория
+                    Основная категория *
                   </label>
                   <select
-                    value={categoryId}
-                    onChange={(e) => setCategoryId(e.target.value)}
+                    required
+                    value={selectedMainCategoryId}
+                    onChange={(e) => {
+                      const newMainId = e.target.value;
+                      setSelectedMainCategoryId(newMainId);
+                      const children = subcategoriesByParent[newMainId] || [];
+                      if (children.length > 0) {
+                        setSelectedSubcategoryId(children[0].id);
+                        setCategoryId(children[0].id);
+                      } else {
+                        setSelectedSubcategoryId("");
+                        setCategoryId(newMainId);
+                      }
+                    }}
                     className="w-full px-3 py-2.5 min-h-[44px] text-xs border border-atelier-border rounded-sm bg-white focus:outline-none focus:border-brand-900"
                   >
-                    <option value="">Без категории</option>
-                    {categories.map((c) => (
+                    <option value="">— Выберите основную категорию —</option>
+                    {mainCategories.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.name || c.title || c.slug}
+                        {c.title || c.name || c.slug}
                       </option>
                     ))}
                   </select>
@@ -488,20 +574,73 @@ export default function AdminEditProductPage({
 
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-atelier-charcoal mb-1">
-                    Сложность пошива
+                    Подкатегория {availableSubcategories.length === 0 ? "(нет вложенных)" : "(рекомендуется)"}
                   </label>
                   <select
-                    value={difficultyLevel}
-                    onChange={(e) => setDifficultyLevel(e.target.value as DifficultyLevel)}
-                    className="w-full px-3 py-2.5 min-h-[44px] text-xs border border-atelier-border rounded-sm bg-white focus:outline-none focus:border-brand-900"
+                    value={selectedSubcategoryId}
+                    onChange={(e) => {
+                      const newSubId = e.target.value;
+                      setSelectedSubcategoryId(newSubId);
+                      setCategoryId(newSubId || selectedMainCategoryId);
+                    }}
+                    disabled={availableSubcategories.length === 0}
+                    className="w-full px-3 py-2.5 min-h-[44px] text-xs border border-atelier-border rounded-sm bg-white focus:outline-none focus:border-brand-900 disabled:bg-gray-50 disabled:text-gray-400"
                   >
-                    <option value="BEGINNER">Для начинающих (Beginner)</option>
-                    <option value="EASY">Простой (Easy)</option>
-                    <option value="MEDIUM">Средний (Medium)</option>
-                    <option value="INTERMEDIATE">Уверенный (Intermediate)</option>
-                    <option value="ADVANCED">Продвинутый (Advanced)</option>
-                    <option value="EXPERT">Эксперт / Профи (Expert)</option>
+                    {availableSubcategories.length > 0 ? (
+                      <>
+                        <option value="">— Без подкатегории (привязать к основной) —</option>
+                        {availableSubcategories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.title || c.name || c.slug}
+                          </option>
+                        ))}
+                      </>
+                    ) : (
+                      <option value="">— Без подкатегорий (выбрана основная) —</option>
+                    )}
                   </select>
+                </div>
+              </div>
+
+              {/* Хлебные крошки выбранной категории и уровень сложности */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                <div className="text-[11px] text-atelier-muted bg-atelier-surface/50 px-3 py-2 rounded-sm border border-atelier-border/60 flex items-center space-x-1.5 truncate">
+                  <span className="font-medium text-brand-950">Раздел:</span>
+                  <span className="text-brand-800 font-semibold truncate">
+                    {mainCategories.find((c) => c.id === selectedMainCategoryId)?.title || "Не выбрана"}
+                  </span>
+                  {selectedSubcategoryId && (
+                    <>
+                      <span>→</span>
+                      <span className="text-brand-900 font-bold truncate">
+                        {availableSubcategories.find((c) => c.id === selectedSubcategoryId)?.title ||
+                          categories.find((c) => c.id === selectedSubcategoryId)?.title}
+                      </span>
+                    </>
+                  )}
+                  {!selectedSubcategoryId && selectedMainCategoryId && (
+                    <span className="text-atelier-muted">(основная)</span>
+                  )}
+                </div>
+
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-atelier-charcoal whitespace-nowrap">
+                      Сложность:
+                    </label>
+                    <select
+                      value={difficultyLevel}
+                      onChange={(e) => setDifficultyLevel(e.target.value as DifficultyLevel)}
+                      className="w-full px-3 py-2 min-h-[44px] text-xs border border-atelier-border rounded-sm bg-white focus:outline-none focus:border-brand-900"
+                    >
+                      <option value="BEGINNER">Для начинающих (Beginner)</option>
+                      <option value="EASY">Простой (Easy)</option>
+                      <option value="MEDIUM">Средний (Medium)</option>
+                      <option value="INTERMEDIATE">Уверенный (Intermediate)</option>
+                      <option value="ADVANCED">Продвинутый (Advanced)</option>
+                      <option value="EXPERT">Эксперт / Профи (Expert)</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 

@@ -71,6 +71,22 @@ export class CatalogAdminController {
   // ===========================================================================
 
   /**
+   * GET /api/v1/admin/categories
+   * Получение полного списка категорий со связями и счетчиками
+   */
+  @Get("categories")
+  @HttpCode(HttpStatus.OK)
+  async getCategories(@Req() req: FastifyRequest) {
+    this.authenticateAdmin(req);
+    const data = await this.catalogService.getCategoriesForAdmin();
+    return {
+      success: true,
+      data,
+      meta: { timestamp: new Date().toISOString() },
+    };
+  }
+
+  /**
    * POST /api/v1/admin/categories
    * Создание новой категории
    */
@@ -119,6 +135,22 @@ export class CatalogAdminController {
     }
 
     const data = await this.catalogService.updateCategory(id, parseRes.data);
+    return {
+      success: true,
+      data,
+      meta: { timestamp: new Date().toISOString() },
+    };
+  }
+
+  /**
+   * DELETE /api/v1/admin/categories/:id
+   * Удаление категории
+   */
+  @Delete("categories/:id")
+  @HttpCode(HttpStatus.OK)
+  async deleteCategory(@Param("id") id: string, @Req() req: FastifyRequest) {
+    this.authenticateAdmin(req);
+    const data = await this.catalogService.deleteCategory(id);
     return {
       success: true,
       data,

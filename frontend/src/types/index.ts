@@ -28,7 +28,19 @@ export interface Category {
   slug: string;
   description?: string | null;
   parentId?: string | null;
+  displayOrder?: number;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  parent?: {
+    id: string;
+    title: string;
+    slug: string;
+  } | null;
   children?: Category[];
+  _count?: {
+    products?: number;
+  };
 }
 
 export interface FilterItem {

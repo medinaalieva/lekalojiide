@@ -211,24 +211,70 @@ export function CatalogFilters({
           {categories.map((cat) => {
             const catLabel = cat.title || cat.name || "Категория";
             const isDressSlug = (s: string) => s === "platya" || s === "plate";
-            const isSelected =
+            const isParentSelected =
               selectedCategorySlug === cat.slug ||
               (isDressSlug(selectedCategorySlug) &&
                 (isDressSlug(cat.slug) || (cat.title || "").toLowerCase().includes("плать")));
+
+            const hasChildren = Boolean(cat.children && cat.children.length > 0);
+            const hasSelectedChild = Boolean(
+              hasChildren &&
+                cat.children!.some(
+                  (ch) =>
+                    selectedCategorySlug === ch.slug ||
+                    (isDressSlug(selectedCategorySlug) &&
+                      (isDressSlug(ch.slug) || (ch.title || "").toLowerCase().includes("плать")))
+                )
+            );
+
             return (
-              <li key={cat.id}>
+              <li key={cat.id} className="space-y-0.5">
                 <button
                   type="button"
-                  onClick={() => onSelectCategorySlug(isSelected ? "" : cat.slug)}
+                  onClick={() => onSelectCategorySlug(isParentSelected ? "" : cat.slug)}
                   className={`w-full text-left px-2.5 py-1.5 rounded-sm transition-colors text-xs flex items-center justify-between ${
-                    isSelected
+                    isParentSelected
                       ? "bg-brand-900 font-semibold text-white"
-                      : "text-atelier-charcoal hover:bg-atelier-subtle"
+                      : hasSelectedChild
+                      ? "bg-brand-50 text-brand-900 font-semibold"
+                      : "text-atelier-charcoal hover:bg-atelier-subtle font-medium"
                   }`}
                 >
                   <span className="truncate pr-2">{catLabel}</span>
-                  {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                  {isParentSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
                 </button>
+
+                {hasChildren && (
+                  <ul className="pl-3.5 border-l-2 border-brand-100/80 my-1 space-y-0.5">
+                    {cat.children!.map((child) => {
+                      const childLabel = child.title || child.name || child.slug;
+                      const isChildSelected =
+                        selectedCategorySlug === child.slug ||
+                        (isDressSlug(selectedCategorySlug) &&
+                          (isDressSlug(child.slug) ||
+                            (child.title || "").toLowerCase().includes("плать")));
+
+                      return (
+                        <li key={child.id}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onSelectCategorySlug(isChildSelected ? "" : child.slug)
+                            }
+                            className={`w-full text-left px-2 py-1 rounded-sm transition-colors text-[11px] flex items-center justify-between ${
+                              isChildSelected
+                                ? "bg-brand-900 font-semibold text-white"
+                                : "text-atelier-muted hover:text-brand-950 hover:bg-atelier-subtle"
+                            }`}
+                          >
+                            <span className="truncate pr-1">{childLabel}</span>
+                            {isChildSelected && <Check className="w-3 h-3 shrink-0" />}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </li>
             );
           })}

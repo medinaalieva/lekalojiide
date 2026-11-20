@@ -18,14 +18,52 @@ export const CreateCategorySchema = z.object({
     .max(150, { message: "Слаг не может превышать 150 символов" })
     .optional(),
   description: z.string().trim().optional().nullable(),
-  parentId: z.string().uuid({ message: "Некорректный ID родительской категории" }).optional().nullable(),
-  displayOrder: z.number().int().optional().default(0),
+  parentId: z
+    .preprocess(
+      (v) => (v === "" || v === undefined ? null : v),
+      z.string().uuid({ message: "Некорректный ID родительской категории" }).nullable()
+    )
+    .optional(),
+  displayOrder: z
+    .preprocess(
+      (v) => (v === "" || v === null || v === undefined ? 0 : Number(v)),
+      z.number().int()
+    )
+    .optional()
+    .default(0),
   isActive: z.boolean().optional().default(true),
 });
 
 export type CreateCategoryDto = z.infer<typeof CreateCategorySchema>;
 
-export const UpdateCategorySchema = CreateCategorySchema.partial();
+export const UpdateCategorySchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(2, { message: "Название категории должно содержать не менее 2 символов" })
+    .max(150, { message: "Название категории не может превышать 150 символов" })
+    .optional(),
+  slug: z
+    .string()
+    .trim()
+    .min(2, { message: "Слаг должен содержать не менее 2 символов" })
+    .max(150, { message: "Слаг не может превышать 150 символов" })
+    .optional(),
+  description: z.string().trim().optional().nullable(),
+  parentId: z
+    .preprocess(
+      (v) => (v === "" || v === undefined ? null : v),
+      z.string().uuid({ message: "Некорректный ID родительской категории" }).nullable()
+    )
+    .optional(),
+  displayOrder: z
+    .preprocess(
+      (v) => (v === "" || v === null || v === undefined ? undefined : Number(v)),
+      z.number().int().optional()
+    )
+    .optional(),
+  isActive: z.boolean().optional(),
+});
 export type UpdateCategoryDto = z.infer<typeof UpdateCategorySchema>;
 
 // =============================================================================

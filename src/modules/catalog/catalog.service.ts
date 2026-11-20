@@ -32,6 +32,7 @@ export interface CategoryTreeItem {
   id: string;
   parentId: string | null;
   title: string;
+  name: string;
   slug: string;
   description: string | null;
   displayOrder: number;
@@ -75,6 +76,7 @@ export class CatalogService {
         id: cat.id,
         parentId: cat.parentId,
         title: cat.title,
+        name: cat.title,
         slug: cat.slug,
         description: cat.description,
         displayOrder: cat.displayOrder,
@@ -211,7 +213,15 @@ export class CatalogService {
       const categoryIds = [category.id, ...category.children.map((c: { id: string }) => c.id)];
       where.categoryId = { in: categoryIds };
     } else if (query.categoryId) {
-      where.categoryId = query.categoryId;
+      const category = await this.prisma.category.findUnique({
+        where: { id: query.categoryId },
+        include: { children: { select: { id: true } } },
+      });
+      if (category && category.children && category.children.length > 0) {
+        where.categoryId = { in: [category.id, ...category.children.map((c: { id: string }) => c.id)] };
+      } else {
+        where.categoryId = query.categoryId;
+      }
     }
 
     // 3. Поиск по названию или описанию
@@ -426,7 +436,7 @@ export class CatalogService {
       where: { slug: targetSlug },
       include: {
         category: {
-          select: { id: true, title: true, slug: true },
+          select: { id: true, title: true, slug: true, parentId: true },
         },
         images: {
           orderBy: [{ isCover: "desc" }, { displayOrder: "asc" }],
@@ -569,7 +579,7 @@ export class CatalogService {
       where: { id },
       include: {
         category: {
-          select: { id: true, title: true, slug: true },
+          select: { id: true, title: true, slug: true, parentId: true },
         },
         images: {
           orderBy: [{ isCover: "desc" }, { displayOrder: "asc" }],
@@ -851,6 +861,68 @@ export class CatalogService {
         ...(dto.displayOrder !== undefined ? { displayOrder: dto.displayOrder } : {}),
         ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
       },
+    });
+  }
+
+  /**
+   * Получение списка всех категорий со связями для админ-панели
+   */
+  async getCategoriesForAdmin() {
+    return this.prisma.category.findMany({
+      include: {
+        parent: { select: { id: true, title: true, slug: true } },
+        children: {
+          orderBy: [{ displayOrder: "asc" }, { title: "asc" }],
+          select: {
+            id: true,
+            parentId: true,
+            title: true,
+            slug: true,
+            description: true,
+            displayOrder: true,
+            isActive: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+        _count: { select: { products: true } },
+      },
+      orderBy: [{ displayOrder: "asc" }, { title: "asc" }],
+    });
+  }
+
+  /**
+   * Безопасное удаление категории (с проверкой привязанных товаров и подкатегорий)
+   */
+  async deleteCategory(id: string) {
+    const category = await this.prisma.category.findUnique({
+      where: { id },
+      include: {
+        children: { select: { id: true, title: true } },
+        products: { select: { id: true, title: true }, take: 5 },
+      },
+    });
+
+    if (!category) {
+      throw new NotFoundError("CATEGORY_NOT_FOUND", "Категория не найдена");
+    }
+
+    if (category.products.length > 0) {
+      throw new ConflictError(
+        "CATEGORY_HAS_PRODUCTS",
+        `Нельзя удалить категорию «${category.title}», так как к ней привязаны товары (${category.products.length}). Сначала перенесите товары в другую категорию или деактивируйте категорию.`
+      );
+    }
+
+    if (category.children.length > 0) {
+      throw new ConflictError(
+        "CATEGORY_HAS_CHILDREN",
+        `Нельзя удалить категорию «${category.title}», так как она содержит ${category.children.length} подкатегорий. Сначала удалите или переместите подкатегории.`
+      );
+    }
+
+    return this.prisma.category.delete({
+      where: { id },
     });
   }
 
