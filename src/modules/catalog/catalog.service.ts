@@ -174,11 +174,25 @@ export class CatalogService {
     }
 
     // 2. Фильтрация по категории
-    if (query.categorySlug) {
-      const category = await this.prisma.category.findUnique({
-        where: { slug: query.categorySlug },
+    const catSlug = query.categorySlug || (query as any).category;
+    if (catSlug) {
+      let category = await this.prisma.category.findUnique({
+        where: { slug: catSlug },
         include: { children: { select: { id: true } } },
       });
+
+      // Alias fallback for dresses (platya <-> plate) or fuzzy title match
+      if (!category && (catSlug === "platya" || catSlug === "plate")) {
+        category = await this.prisma.category.findFirst({
+          where: {
+            OR: [
+              { slug: { in: ["platya", "plate", "dresses"] } },
+              { title: { contains: "плать", mode: "insensitive" } },
+            ],
+          },
+          include: { children: { select: { id: true } } },
+        });
+      }
 
       if (!category) {
         return {

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShoppingBag, User, Menu, X, Search, Sparkles, BookOpen, Layers } from "lucide-react";
+import { ShoppingBag, User, Menu, X, Search } from "lucide-react";
 import { useAuth } from "../../lib/auth-context";
 import { useCart } from "../../lib/cart-context";
 
@@ -13,7 +13,20 @@ export function Navbar() {
   const { itemsCount } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [currentSearch, setCurrentSearch] = useState<string>("");
   const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Sync current query string on mount, navigation and popstate
+  useEffect(() => {
+    function updateSearch() {
+      if (typeof window !== "undefined") {
+        setCurrentSearch(window.location.search);
+      }
+    }
+    updateSearch();
+    window.addEventListener("popstate", updateSearch);
+    return () => window.removeEventListener("popstate", updateSearch);
+  }, [pathname]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -30,11 +43,44 @@ export function Navbar() {
     setMobileMenuOpen(false);
   }, [pathname]);
 
+  // Determine active link based on pathname & query parameters
+  const isLinkActive = (href: string) => {
+    if (href === "/") {
+      return pathname === "/";
+    }
+    const sp = new URLSearchParams(currentSearch);
+    const currentCategory = sp.get("categorySlug") || sp.get("category") || "";
+    const isNew = sp.get("isNew") === "true";
+    const isBestseller = sp.get("isBestseller") === "true";
+
+    if (href === "/catalog") {
+      return pathname === "/catalog" && !currentCategory && !isNew && !isBestseller;
+    }
+    if (href.includes("categorySlug=platya") || href.includes("categorySlug=plate")) {
+      return (
+        pathname === "/catalog" &&
+        (currentCategory === "platya" || currentCategory === "plate")
+      );
+    }
+    if (href.includes("isNew=true")) {
+      return pathname === "/catalog" && isNew;
+    }
+    if (href.includes("isBestseller=true")) {
+      return pathname === "/catalog" && isBestseller;
+    }
+    if (href === "/cart") {
+      return pathname === "/cart";
+    }
+    return pathname === href;
+  };
+
   const navLinks = [
-    { href: "/catalog", label: "Каталог выкроек" },
-    { href: "/catalog?categorySlug=platya", label: "Платья" },
-    { href: "/cabinet/library", label: "Мои выкройки", authRequired: true },
-    { href: "/cabinet/downloads", label: "Центр загрузок", authRequired: true },
+    { href: "/", label: "Главная", testId: "nav-home" },
+    { href: "/catalog", label: "Каталог", testId: "nav-catalog" },
+    { href: "/catalog?categorySlug=platya", label: "Платья", testId: "nav-dresses" },
+    { href: "/catalog", label: "Все выкройки", testId: "nav-all-patterns" },
+    { href: "/catalog?isNew=true", label: "Новинки", testId: "nav-new" },
+    { href: "/catalog?isBestseller=true", label: "Бестселлеры", testId: "nav-bestsellers" },
   ];
 
   return (
@@ -42,7 +88,7 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
           {/* Logo - Protected from mobile clipping & wrapping */}
-          <Link href="/" className="flex flex-col group shrink-0 py-1">
+          <Link href="/" className="flex flex-col group shrink-0 py-1" aria-label="LEKALO ZHIIDE Главная">
             <span className="font-serif text-lg sm:text-2xl tracking-[0.16em] sm:tracking-[0.2em] font-semibold text-brand-950 uppercase group-hover:text-brand-700 transition-colors whitespace-nowrap leading-tight">
               Lekalo Zhiide
             </span>
@@ -52,17 +98,24 @@ export function Navbar() {
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-6 lg:space-x-8">
-            {navLinks.map((link) => {
-              if (link.authRequired && !user) return null;
-              const isActive = pathname === link.href;
+          <nav className="hidden md:flex items-center space-x-3 lg:space-x-5 xl:space-x-7">
+            {navLinks.map((link, idx) => {
+              const active = isLinkActive(link.href);
               return (
                 <Link
-                  key={link.href}
+                  key={`${link.testId}-${idx}`}
                   href={link.href}
-                  className={`text-xs lg:text-sm tracking-wider uppercase transition-colors whitespace-nowrap ${
-                    isActive
-                      ? "text-brand-900 font-semibold border-b-2 border-brand-900 pb-1"
+                  data-testid={link.testId}
+                  onClick={() => {
+                    if (link.href.includes("?")) {
+                      setCurrentSearch(link.href.slice(link.href.indexOf("?")));
+                    } else {
+                      setCurrentSearch("");
+                    }
+                  }}
+                  className={`text-xs lg:text-sm tracking-wider uppercase transition-colors whitespace-nowrap py-1 ${
+                    active
+                      ? "text-brand-900 font-semibold border-b-2 border-brand-900"
                       : "text-atelier-muted hover:text-brand-900"
                   }`}
                 >
@@ -74,9 +127,10 @@ export function Navbar() {
 
           {/* Right Action Icons */}
           <div className="flex items-center space-x-1 sm:space-x-3">
-            {/* Quick Search Button (desktop/tablet) */}
+            {/* Quick Search Button */}
             <Link
               href="/catalog"
+              data-testid="nav-search"
               className="hidden sm:inline-flex p-2 text-atelier-charcoal hover:text-brand-800 transition-colors rounded-sm hover:bg-atelier-subtle"
               aria-label="Поиск по каталогу"
               title="Поиск выкроек"
@@ -87,7 +141,10 @@ export function Navbar() {
             {/* Cart Link */}
             <Link
               href="/cart"
-              className="relative p-2 text-atelier-charcoal hover:text-brand-800 transition-colors rounded-sm hover:bg-atelier-subtle"
+              data-testid="nav-cart"
+              className={`relative p-2 transition-colors rounded-sm hover:bg-atelier-subtle ${
+                pathname === "/cart" ? "text-brand-900 font-bold" : "text-atelier-charcoal hover:text-brand-800"
+              }`}
               aria-label="Корзина"
               title="Корзина"
             >
@@ -99,14 +156,16 @@ export function Navbar() {
               )}
             </Link>
 
-            {/* Auth / Cabinet (desktop shows user/login, mobile accesses via drawer) */}
+            {/* Auth / Cabinet */}
             {user ? (
               <div className="relative group hidden sm:block" ref={userMenuRef}>
                 <button
                   type="button"
+                  data-testid="nav-auth-user"
                   onClick={() => setUserMenuOpen((prev) => !prev)}
                   className="flex items-center space-x-2 text-xs sm:text-sm text-atelier-charcoal hover:text-brand-800 py-1 px-2 rounded-sm hover:bg-atelier-subtle focus:outline-none"
                   aria-expanded={userMenuOpen}
+                  aria-label="Личный кабинет"
                 >
                   <User className="w-5 h-5 stroke-[1.5]" />
                   <span className="font-medium truncate max-w-[120px]">
@@ -167,6 +226,7 @@ export function Navbar() {
             ) : (
               <Link
                 href="/login"
+                data-testid="nav-auth-login"
                 className="hidden sm:inline-flex items-center space-x-1 text-xs tracking-wider uppercase text-atelier-charcoal hover:text-brand-900 font-medium px-2 py-1.5 rounded-sm hover:bg-atelier-subtle"
               >
                 <User className="w-4 h-4 mr-1 stroke-[1.5]" />
@@ -177,6 +237,7 @@ export function Navbar() {
             {/* Mobile menu button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              data-testid="nav-mobile-toggle"
               className="md:hidden p-2 text-atelier-charcoal rounded-sm hover:bg-atelier-subtle focus:outline-none"
               aria-label="Меню навигации"
             >
@@ -188,30 +249,84 @@ export function Navbar() {
 
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-white border-b border-atelier-border px-5 pt-3 pb-6 space-y-3 animate-in slide-in-from-top-2">
+        <div className="md:hidden bg-white border-b border-atelier-border px-5 pt-3 pb-6 space-y-2 animate-in slide-in-from-top-2">
           <div className="text-[10px] uppercase tracking-widest text-atelier-muted font-bold pt-1">
             Навигация
           </div>
           <Link
-            href="/catalog"
+            href="/"
+            data-testid="nav-mobile-home"
             onClick={() => setMobileMenuOpen(false)}
-            className="block text-sm uppercase tracking-wider text-atelier-charcoal py-2 border-b border-atelier-border/50 font-medium"
+            className={`block text-sm uppercase tracking-wider py-2 border-b border-atelier-border/50 ${
+              pathname === "/" ? "font-semibold text-brand-900" : "text-atelier-charcoal"
+            }`}
           >
-            Все выкройки каталога
+            Главная
+          </Link>
+          <Link
+            href="/catalog"
+            data-testid="nav-mobile-catalog"
+            onClick={() => setMobileMenuOpen(false)}
+            className={`block text-sm uppercase tracking-wider py-2 border-b border-atelier-border/50 ${
+              pathname === "/catalog" && !currentSearch
+                ? "font-semibold text-brand-900"
+                : "text-atelier-charcoal"
+            }`}
+          >
+            Каталог
+          </Link>
+          <Link
+            href="/catalog"
+            data-testid="nav-mobile-all-patterns"
+            onClick={() => setMobileMenuOpen(false)}
+            className="block text-sm uppercase tracking-wider text-atelier-charcoal py-2 border-b border-atelier-border/50"
+          >
+            Все выкройки
           </Link>
           <Link
             href="/catalog?categorySlug=platya"
+            data-testid="nav-mobile-dresses"
             onClick={() => setMobileMenuOpen(false)}
-            className="block text-sm uppercase tracking-wider text-atelier-charcoal py-2 border-b border-atelier-border/50"
+            className={`block text-sm uppercase tracking-wider py-2 border-b border-atelier-border/50 ${
+              currentSearch.includes("categorySlug=platya") || currentSearch.includes("categorySlug=plate")
+                ? "font-semibold text-brand-900"
+                : "text-atelier-charcoal"
+            }`}
           >
-            Платья и сарафаны
+            Платья
           </Link>
           <Link
-            href="/catalog?categorySlug=yubki"
+            href="/catalog?isNew=true"
+            data-testid="nav-mobile-new"
             onClick={() => setMobileMenuOpen(false)}
-            className="block text-sm uppercase tracking-wider text-atelier-charcoal py-2 border-b border-atelier-border/50"
+            className={`block text-sm uppercase tracking-wider py-2 border-b border-atelier-border/50 ${
+              currentSearch.includes("isNew=true") ? "font-semibold text-brand-900" : "text-atelier-charcoal"
+            }`}
           >
-            Юбки и брюки
+            Новинки
+          </Link>
+          <Link
+            href="/catalog?isBestseller=true"
+            data-testid="nav-mobile-bestsellers"
+            onClick={() => setMobileMenuOpen(false)}
+            className={`block text-sm uppercase tracking-wider py-2 border-b border-atelier-border/50 ${
+              currentSearch.includes("isBestseller=true") ? "font-semibold text-brand-900" : "text-atelier-charcoal"
+            }`}
+          >
+            Бестселлеры
+          </Link>
+          <Link
+            href="/cart"
+            data-testid="nav-mobile-cart"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center justify-between text-sm uppercase tracking-wider text-atelier-charcoal py-2 border-b border-atelier-border/50"
+          >
+            <span>Корзина</span>
+            {itemsCount > 0 && (
+              <span className="px-2 py-0.5 text-xs font-bold text-white bg-brand-800 rounded-full">
+                {itemsCount}
+              </span>
+            )}
           </Link>
 
           {user ? (
@@ -229,6 +344,14 @@ export function Navbar() {
                 </Link>
               )}
               <Link
+                href="/cabinet"
+                data-testid="nav-mobile-cabinet"
+                onClick={() => setMobileMenuOpen(false)}
+                className="block text-sm uppercase tracking-wider text-atelier-charcoal py-2 border-b border-atelier-border/50 text-brand-950 font-semibold"
+              >
+                Личный кабинет ({user.email})
+              </Link>
+              <Link
                 href="/cabinet/library"
                 onClick={() => setMobileMenuOpen(false)}
                 className="block text-sm uppercase tracking-wider text-atelier-charcoal py-2 border-b border-atelier-border/50"
@@ -241,13 +364,6 @@ export function Navbar() {
                 className="block text-sm uppercase tracking-wider text-atelier-charcoal py-2 border-b border-atelier-border/50"
               >
                 Центр скачивания PDF
-              </Link>
-              <Link
-                href="/cabinet"
-                onClick={() => setMobileMenuOpen(false)}
-                className="block text-sm uppercase tracking-wider text-atelier-charcoal py-2 border-b border-atelier-border/50 text-brand-950 font-semibold"
-              >
-                Профиль ({user.email})
               </Link>
               <button
                 onClick={() => {
@@ -263,6 +379,7 @@ export function Navbar() {
             <div className="pt-2">
               <Link
                 href="/login"
+                data-testid="nav-mobile-login"
                 onClick={() => setMobileMenuOpen(false)}
                 className="block w-full text-center py-2.5 bg-brand-900 text-white rounded-sm text-xs uppercase tracking-wider font-semibold shadow-sm"
               >

@@ -210,7 +210,11 @@ export function CatalogFilters({
           </li>
           {categories.map((cat) => {
             const catLabel = cat.title || cat.name || "Категория";
-            const isSelected = selectedCategorySlug === cat.slug;
+            const isDressSlug = (s: string) => s === "platya" || s === "plate";
+            const isSelected =
+              selectedCategorySlug === cat.slug ||
+              (isDressSlug(selectedCategorySlug) &&
+                (isDressSlug(cat.slug) || (cat.title || "").toLowerCase().includes("плать")));
             return (
               <li key={cat.id}>
                 <button

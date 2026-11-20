@@ -187,6 +187,7 @@ export const CatalogQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(12),
   categorySlug: z.string().trim().optional(),
+  category: z.string().trim().optional(),
   categoryId: z.string().uuid().optional(),
   sizes: z.string().trim().optional(), // разделитель запятая: "42,44,46"
   size: z.string().trim().optional(),

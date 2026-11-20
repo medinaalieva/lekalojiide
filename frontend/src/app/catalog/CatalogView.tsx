@@ -60,13 +60,16 @@ function CatalogContent() {
   // Mobile drawer state
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
-  // Initial mount flag to prevent unnecessary double fetch
-  const isInitializedRef = useRef(false);
+  // Track last synchronized query string to avoid cyclic updates
+  const lastSyncedQsRef = useRef<string | null>(null);
 
-  // Parse initial state from URL searchParams
+  // Reactive URL searchParams synchronization (handles initial load and Navbar / router clicks)
   useEffect(() => {
-    if (isInitializedRef.current) return;
-    isInitializedRef.current = true;
+    const currentQs = searchParams?.toString() || "";
+    if (lastSyncedQsRef.current === currentQs) {
+      return;
+    }
+    lastSyncedQsRef.current = currentQs;
 
     const qSearch = searchParams?.get("search") || "";
     const qCat = searchParams?.get("categorySlug") || searchParams?.get("category") || "";
@@ -80,20 +83,18 @@ function CatalogContent() {
     const qSort = searchParams?.get("sort") || "newest";
     const qPage = parseInt(searchParams?.get("page") || "1", 10);
 
-    if (qSearch) {
-      setSearchInput(qSearch);
-      setSearchQuery(qSearch);
-    }
-    if (qCat) setSelectedCategorySlug(qCat);
-    if (qSizes) setSelectedSizes(qSizes.split(",").map((s) => s.trim()).filter(Boolean));
-    if (qHeights) setSelectedHeights(qHeights.split(",").map((h) => h.trim()).filter(Boolean));
-    if (qFormats) setSelectedFormats(qFormats.split(",").map((f) => f.trim()).filter(Boolean));
-    if (qDifficulty) setSelectedDifficulties(qDifficulty.split(",").map((d) => d.trim()).filter(Boolean));
-    if (qIsNew) setIsNewOnly(true);
-    if (qIsBestseller) setIsBestsellerOnly(true);
-    if (qHasDiscount) setHasDiscountOnly(true);
-    if (qSort) setSort(qSort);
-    if (!isNaN(qPage) && qPage > 0) setPage(qPage);
+    setSearchInput(qSearch);
+    setSearchQuery(qSearch);
+    setSelectedCategorySlug(qCat);
+    setSelectedSizes(qSizes ? qSizes.split(",").map((s) => s.trim()).filter(Boolean) : []);
+    setSelectedHeights(qHeights ? qHeights.split(",").map((h) => h.trim()).filter(Boolean) : []);
+    setSelectedFormats(qFormats ? qFormats.split(",").map((f) => f.trim()).filter(Boolean) : []);
+    setSelectedDifficulties(qDifficulty ? qDifficulty.split(",").map((d) => d.trim()).filter(Boolean) : []);
+    setIsNewOnly(qIsNew);
+    setIsBestsellerOnly(qIsBestseller);
+    setHasDiscountOnly(qHasDiscount);
+    setSort(qSort);
+    setPage(!isNaN(qPage) && qPage > 0 ? qPage : 1);
   }, [searchParams]);
 
   // Load categories and filter dictionaries
@@ -149,8 +150,13 @@ function CatalogContent() {
     if (page > 1) params.set("page", String(page));
 
     const qs = params.toString();
-    const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
-    window.history.replaceState(null, "", newUrl);
+    const windowQs = window.location.search.replace(/^\?/, "");
+
+    if (qs !== windowQs) {
+      lastSyncedQsRef.current = qs;
+      const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+      window.history.replaceState(null, "", newUrl);
+    }
   }, [
     searchQuery,
     selectedCategorySlug,
@@ -318,8 +324,14 @@ function CatalogContent() {
     (hasDiscountOnly ? 1 : 0) +
     (searchQuery.trim() ? 1 : 0);
 
-  // Selected category object
-  const activeCategory = categories.find((c) => c.slug === selectedCategorySlug);
+  // Selected category object (with alias fallback for dresses platya/plate)
+  const isDressSlug = (s: string) => s === "platya" || s === "plate";
+  const activeCategory = categories.find(
+    (c) =>
+      c.slug === selectedCategorySlug ||
+      (isDressSlug(selectedCategorySlug) &&
+        (isDressSlug(c.slug) || (c.title || "").toLowerCase().includes("плать")))
+  );
 
   return (
     <div className="bg-atelier-surface min-h-screen py-8 sm:py-12">
