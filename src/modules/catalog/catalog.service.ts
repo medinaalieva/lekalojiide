@@ -1473,11 +1473,18 @@ export class CatalogService {
       });
     }
 
+    const safeImageUrl = dto.imageUrl.trim();
+    if (safeImageUrl.startsWith("data:") || safeImageUrl.length > 1000) {
+      throw new BadRequestError("INVALID_IMAGE_URL", "URL изображения не должен превышать 1000 символов и не может быть Base64 Data URI");
+    }
+
+    const safeAltText = (dto.altText || product.title || "Выкройка").slice(0, 255);
+
     return this.prisma.productImage.create({
       data: {
         productId,
-        imageUrl: dto.imageUrl,
-        altText: dto.altText || null,
+        imageUrl: safeImageUrl,
+        altText: safeAltText,
         displayOrder: dto.displayOrder ?? 0,
         isCover: dto.isCover ?? false,
       },

@@ -1,6 +1,9 @@
 #!/bin/sh
 set -e
 
+# Обеспечиваем работу S3-хранилища для NestJS внутри контейнера
+export STORAGE_DRIVER="${STORAGE_DRIVER:-s3}"
+
 echo "=== LEKALO ZHIIDE Backend Container Starting ==="
 
 # Apply pending database migrations only when explicitly requested (RUN_MIGRATIONS=true)

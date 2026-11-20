@@ -1,5 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "build": {
+    "env": {
+      "STORAGE_DRIVER": "vfs"
+    }
+  },
   "services": {
     "frontend": {
       "root": "frontend",

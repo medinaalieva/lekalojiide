@@ -200,21 +200,28 @@ export class StorageAdminController {
         fileSizeBytes = uploadRes.fileSizeBytes;
       }
     } catch (s3Err: any) {
-      this.logger.warn(`S3 upload warning: ${s3Err?.message}`);
+      this.logger.error(`S3 upload error: ${s3Err?.message}`);
       if (dto.url) {
-        publicUrl = dto.url;
+        publicUrl = dto.url.slice(0, 1000);
       } else {
-        publicUrl = `data:${contentType};base64,${fileBuffer.toString("base64")}`;
+        throw new BadRequestError(
+          "STORAGE_UPLOAD_ERROR",
+          `Ошибка загрузки фото в облачное хранилище Supabase: ${s3Err?.message || "Не удалось сохранить файл"}`
+        );
       }
     }
 
-    // Если хранилище вернуло локальный тестовый домен, но у нас есть реальный URL или base64 — используем реальный контент
-    if (publicUrl.includes("lekalozhiide.local") || publicUrl.includes(".local/")) {
-      if (dto.url) {
-        publicUrl = dto.url;
-      } else {
-        publicUrl = `data:${contentType};base64,${fileBuffer.toString("base64")}`;
-      }
+    // Если был передан прямой URL изображения
+    if (dto.url && (!publicUrl || publicUrl.includes("lekalozhiide.local"))) {
+      publicUrl = dto.url.slice(0, 1000);
+    }
+
+    // Защита схемы БД: imageUrl VARCHAR(1000) не принимает Base64 Data URI
+    if (publicUrl.startsWith("data:") || publicUrl.length > 1000) {
+      throw new BadRequestError(
+        "INVALID_IMAGE_URL",
+        "URL изображения не должен превышать 1000 символов и не может быть Base64 Data URI. Файл должен сохраняться в S3/Supabase."
+      );
     }
 
     // Если передан productId — привязываем фото к товару в БД
@@ -235,11 +242,13 @@ export class StorageAdminController {
         });
       }
 
+      const safeAltText = (dto.altText || product.title || "Выкройка").slice(0, 255);
+
       createdImage = await this.prisma.productImage.create({
         data: {
           productId: dto.productId,
           imageUrl: publicUrl,
-          altText: dto.altText || product.title,
+          altText: safeAltText,
           isCover: dto.isCover ?? false,
           displayOrder: dto.displayOrder ?? 0,
         },

@@ -40,6 +40,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=4000
+ENV STORAGE_DRIVER=s3
 
 # Install openssl for Prisma engine runtime
 RUN apk add --no-cache openssl wget

@@ -9,18 +9,11 @@ const storageServiceProvider: Provider = {
   provide: STORAGE_SERVICE,
   useFactory: (mockStorage: MockStorageService, s3Storage: S3StorageService): IStorageService => {
     const rawDriver = process.env.STORAGE_DRIVER?.toLowerCase().trim();
-    // Автоопределение S3/Supabase: если настроены эндпоинт или ключи доступа, автоматически используем s3Storage
-    const hasS3Config = Boolean(
-      process.env.S3_ENDPOINT ||
-      process.env.S3_ACCESS_KEY_ID ||
-      process.env.AWS_ACCESS_KEY_ID ||
-      process.env.SUPABASE_URL
-    );
-    const driver = rawDriver || (hasS3Config ? "s3" : "mock");
-    if (driver === "s3" || driver === "supabase") {
-      return s3Storage;
+    if (rawDriver === "mock") {
+      return mockStorage;
     }
-    return mockStorage;
+    // По умолчанию используем облачное хранилище S3/Supabase
+    return s3Storage;
   },
   inject: [MockStorageService, S3StorageService],
 };

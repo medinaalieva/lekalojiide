@@ -25,6 +25,8 @@ export class S3StorageService implements IStorageService {
   private readonly s3Client: S3Client;
   private readonly endpoint: string;
   private readonly region: string;
+  private readonly accessKeyId: string;
+  private readonly secretAccessKey: string;
   public readonly publicBucket: string;
   public readonly privateBucket: string;
 
@@ -36,12 +38,18 @@ export class S3StorageService implements IStorageService {
     this.publicBucket = process.env.S3_PUBLIC_BUCKET || "product-images";
     this.privateBucket = process.env.S3_PRIVATE_BUCKET || "pattern-files";
 
-    const accessKeyId = process.env.S3_ACCESS_KEY_ID || "";
-    const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY || "";
+    this.accessKeyId =
+      process.env.S3_ACCESS_KEY_ID ||
+      process.env.AWS_ACCESS_KEY_ID ||
+      "";
+    this.secretAccessKey =
+      process.env.S3_SECRET_ACCESS_KEY ||
+      process.env.AWS_SECRET_ACCESS_KEY ||
+      "";
 
-    if (!accessKeyId || !secretAccessKey) {
+    if (!this.accessKeyId || !this.secretAccessKey) {
       this.logger.warn(
-        "S3 credentials (S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY) не заданы. S3StorageService инициализирован в ограниченном режиме."
+        "S3 credentials (S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY) не заданы в переменных окружения. Хранилище S3 ожидает настройки."
       );
     }
 
@@ -49,8 +57,8 @@ export class S3StorageService implements IStorageService {
       endpoint: this.endpoint,
       region: this.region,
       credentials: {
-        accessKeyId,
-        secretAccessKey,
+        accessKeyId: this.accessKeyId,
+        secretAccessKey: this.secretAccessKey,
       },
       forcePathStyle: true, // Обязательно для Supabase S3 API
     });
@@ -62,6 +70,13 @@ export class S3StorageService implements IStorageService {
   async generatePresignedGetUrl(
     params: GeneratePresignedUrlParams
   ): Promise<PresignedUrlResult> {
+    if (!this.accessKeyId || !this.secretAccessKey) {
+      throw new BadRequestError(
+        "STORAGE_CREDENTIALS_MISSING",
+        "Облачное хранилище S3 не настроено. В переменных окружения отсутствуют S3_ACCESS_KEY_ID и/или S3_SECRET_ACCESS_KEY."
+      );
+    }
+
     if (!params.s3Bucket || !params.s3Key || !params.fileName) {
       throw new BadRequestError(
         "INVALID_STORAGE_PARAMS",
@@ -140,6 +155,14 @@ export class S3StorageService implements IStorageService {
    * Загрузка файла (буфера) в S3-бакет
    */
   async uploadFile(params: UploadFileParams): Promise<UploadFileResult> {
+    if (!this.accessKeyId || !this.secretAccessKey) {
+      this.logger.error("S3 upload failed: S3_ACCESS_KEY_ID or S3_SECRET_ACCESS_KEY is missing in environment variables.");
+      throw new BadRequestError(
+        "STORAGE_CREDENTIALS_MISSING",
+        "Облачное хранилище S3 не настроено. В переменных окружения отсутствуют S3_ACCESS_KEY_ID и/или S3_SECRET_ACCESS_KEY. Обратитесь к администратору для настройки Vercel Environment Variables."
+      );
+    }
+
     const fileSizeBytes = params.body.length;
     const sha256Hash = crypto.createHash("sha256").update(params.body).digest("hex");
 
