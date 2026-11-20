@@ -405,6 +405,7 @@ export class CatalogService {
         difficultyLevel: product.difficultyLevel,
         category: product.category,
         coverImage,
+        images: product.images,
         availableSizes,
         createdAt: product.createdAt.toISOString(),
       };
@@ -538,6 +539,11 @@ export class CatalogService {
       };
     });
 
+    const coverImage =
+      product.images.find((img: any) => img.isCover)?.imageUrl ||
+      product.images[0]?.imageUrl ||
+      null;
+
     return {
       id: product.id,
       title: product.title,
@@ -563,6 +569,7 @@ export class CatalogService {
       difficultyLevel: product.difficultyLevel,
       fabricDetails: product.fabricDetails,
       category: product.category,
+      coverImage,
       images: product.images,
       hasInstruction: product.instructions.length > 0,
       variants,
@@ -645,6 +652,11 @@ export class CatalogService {
       bundlePrice: product.bundlePrice,
     });
 
+    const coverImage =
+      product.images.find((img: any) => img.isCover)?.imageUrl ||
+      product.images[0]?.imageUrl ||
+      null;
+
     return {
       id: product.id,
       title: product.title,
@@ -672,6 +684,7 @@ export class CatalogService {
       isActive: product.isActive,
       categoryId: product.categoryId,
       category: product.category,
+      coverImage,
       images: product.images,
       instructions: product.instructions,
       variants,

@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  Logger,
 } from "@nestjs/common";
 import { FastifyRequest } from "fastify";
 import { Role, PrismaClient, FileType } from "@prisma/client";
@@ -92,6 +93,7 @@ const UploadInstructionSchema = z.object({
 
 @Controller("admin/storage")
 export class StorageAdminController {
+  private readonly logger = new Logger(StorageAdminController.name);
   private prisma: PrismaClient;
 
   constructor(
@@ -182,16 +184,38 @@ export class StorageAdminController {
     const bucket = process.env.S3_PUBLIC_BUCKET || "product-images";
     const s3Key = `products/${dto.productId || "general"}/${Date.now()}-${crypto.randomBytes(4).toString("hex")}-${safeBase}${ext}`;
 
-    const uploadRes = await this.storageService.uploadFile({
-      bucket,
-      key: s3Key,
-      body: fileBuffer,
-      contentType,
-      fileName: originalName,
-      isPublic: true,
-    });
+    let publicUrl: string;
+    let fileSizeBytes = fileBuffer.length;
+    try {
+      const uploadRes = await this.storageService.uploadFile({
+        bucket,
+        key: s3Key,
+        body: fileBuffer,
+        contentType,
+        fileName: originalName,
+        isPublic: true,
+      });
+      publicUrl = uploadRes.publicUrl || this.storageService.getPublicUrl(bucket, s3Key);
+      if (uploadRes.fileSizeBytes) {
+        fileSizeBytes = uploadRes.fileSizeBytes;
+      }
+    } catch (s3Err: any) {
+      this.logger.warn(`S3 upload warning: ${s3Err?.message}`);
+      if (dto.url) {
+        publicUrl = dto.url;
+      } else {
+        publicUrl = `data:${contentType};base64,${fileBuffer.toString("base64")}`;
+      }
+    }
 
-    const publicUrl = uploadRes.publicUrl || this.storageService.getPublicUrl(bucket, s3Key);
+    // Если хранилище вернуло локальный тестовый домен, но у нас есть реальный URL или base64 — используем реальный контент
+    if (publicUrl.includes("lekalozhiide.local") || publicUrl.includes(".local/")) {
+      if (dto.url) {
+        publicUrl = dto.url;
+      } else {
+        publicUrl = `data:${contentType};base64,${fileBuffer.toString("base64")}`;
+      }
+    }
 
     // Если передан productId — привязываем фото к товару в БД
     let createdImage = null;
@@ -228,7 +252,7 @@ export class StorageAdminController {
         publicUrl,
         s3Bucket: bucket,
         s3Key,
-        fileSizeBytes: uploadRes.fileSizeBytes,
+        fileSizeBytes,
         contentType,
         image: createdImage,
       },
@@ -935,6 +959,19 @@ export class StorageAdminController {
       }
     }
 
+    if (image.isCover) {
+      const nextCover = await this.prisma.productImage.findFirst({
+        where: { productId: image.productId, id: { not: imageId } },
+        orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }],
+      });
+      if (nextCover) {
+        await this.prisma.productImage.update({
+          where: { id: nextCover.id },
+          data: { isCover: true, displayOrder: 0 },
+        });
+      }
+    }
+
     await this.prisma.productImage.delete({
       where: { id: imageId },
     });
@@ -969,10 +1006,10 @@ export class StorageAdminController {
       data: { isCover: false },
     });
 
-    // Назначаем текущее изображение обложкой
+    // Назначаем текущее изображение обложкой и ставим первый порядковый номер
     const updated = await this.prisma.productImage.update({
       where: { id: imageId },
-      data: { isCover: true },
+      data: { isCover: true, displayOrder: 0 },
     });
 
     return {

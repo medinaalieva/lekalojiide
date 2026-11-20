@@ -224,7 +224,7 @@ export default function AdminEditProductPage({
         setVideoUrl(p.videoUrl || "");
 
         // Cover image
-        const coverImg = p.images?.find((img: any) => img.isCover)?.imageUrl || p.images?.[0]?.imageUrl || "";
+        const coverImg = p.coverImage || p.images?.find((img: any) => img.isCover)?.imageUrl || p.images?.[0]?.imageUrl || "";
         setCoverImageUrl(coverImg);
 
         // Variants
@@ -265,6 +265,7 @@ export default function AdminEditProductPage({
         const res = await api.post<{ success: boolean; data: { publicUrl: string } }>(
           "/api/v1/admin/storage/upload-image",
           {
+            productId,
             fileBase64: base64,
             fileName: file.name,
             contentType: file.type,
@@ -273,13 +274,6 @@ export default function AdminEditProductPage({
         );
         if (res.success && res.data?.publicUrl) {
           setCoverImageUrl(res.data.publicUrl);
-          // Также сразу связываем с товаром
-          await api.post(`/api/v1/admin/products/${productId}/images`, {
-            imageUrl: res.data.publicUrl,
-            altText: title,
-            displayOrder: 1,
-            isCover: true,
-          });
         }
       } catch (err: any) {
         setPhotoUploadError(err?.message || "Ошибка загрузки фото в облако");
@@ -288,6 +282,29 @@ export default function AdminEditProductPage({
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleApplyCoverUrl = async () => {
+    if (!coverImageUrl.trim()) return;
+    setIsUploadingPhoto(true);
+    setPhotoUploadError(null);
+    try {
+      const res = await api.post<{ success: boolean; data: { publicUrl: string } }>(
+        "/api/v1/admin/storage/upload-image",
+        {
+          productId,
+          url: coverImageUrl.trim(),
+          isCover: true,
+        }
+      );
+      if (res.success && res.data?.publicUrl) {
+        setCoverImageUrl(res.data.publicUrl);
+      }
+    } catch (err: any) {
+      setPhotoUploadError(err?.message || "Ошибка применения URL обложки");
+    } finally {
+      setIsUploadingPhoto(false);
+    }
   };
 
   // Pricing calculations
@@ -388,6 +405,19 @@ export default function AdminEditProductPage({
       };
 
       await api.put(`/api/v1/admin/products/${productId}`, payload);
+
+      // Сохраняем обложку, если введен URL
+      if (coverImageUrl.trim()) {
+        try {
+          await api.post("/api/v1/admin/storage/upload-image", {
+            productId,
+            url: coverImageUrl.trim(),
+            isCover: true,
+          });
+        } catch (imgErr) {
+          console.warn("Could not sync cover image URL:", imgErr);
+        }
+      }
 
       setSuccess(true);
       setTimeout(() => {
@@ -1011,13 +1041,25 @@ export default function AdminEditProductPage({
                     <span className="text-[11px] text-atelier-muted block">
                       Способ 2: Или ссылка на изображение
                     </span>
-                    <input
-                      type="url"
-                      value={coverImageUrl}
-                      onChange={(e) => setCoverImageUrl(e.target.value)}
-                      placeholder="https://images.example.com/dress.jpg"
-                      className="w-full px-3 py-2.5 min-h-[44px] text-xs border border-atelier-border rounded-sm focus:outline-none focus:border-brand-900 font-mono"
-                    />
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="url"
+                        value={coverImageUrl}
+                        onChange={(e) => setCoverImageUrl(e.target.value)}
+                        placeholder="https://images.example.com/dress.jpg"
+                        className="flex-1 px-3 py-2.5 min-h-[44px] text-xs border border-atelier-border rounded-sm focus:outline-none focus:border-brand-900 font-mono"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={handleApplyCoverUrl}
+                        disabled={isUploadingPhoto || !coverImageUrl.trim()}
+                        className="min-h-[44px] text-xs shrink-0"
+                      >
+                        Применить
+                      </Button>
+                    </div>
                   </div>
                 </div>
 

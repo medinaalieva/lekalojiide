@@ -23,8 +23,11 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
   // Resolve cover image safely
   let coverImageUrl: string | undefined = product.coverImage;
   if (!coverImageUrl && product.images && product.images.length > 0) {
+    const coverObj = (product.images as any[]).find((img) => typeof img === "object" && img?.isCover);
     const firstImg = product.images[0];
-    coverImageUrl = typeof firstImg === "string" ? firstImg : firstImg.imageUrl;
+    coverImageUrl = coverObj
+      ? (coverObj.imageUrl || coverObj)
+      : (typeof firstImg === "string" ? firstImg : firstImg?.imageUrl);
   }
 
   return (
@@ -35,13 +38,10 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
       {/* Image container */}
       <div className="relative aspect-[3/4] bg-atelier-subtle overflow-hidden flex items-center justify-center">
         {coverImageUrl && !imgError ? (
-          <Image
+          <img
             src={coverImageUrl}
             alt={product.title}
-            fill
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-            className="object-cover object-center group-hover:scale-105 transition-transform duration-500"
-            priority={priority}
+            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
             loading={priority ? "eager" : "lazy"}
             onError={() => setImgError(true)}
           />

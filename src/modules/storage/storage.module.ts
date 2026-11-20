@@ -8,7 +8,15 @@ import { PrismaService } from "../../lib/prisma.service";
 const storageServiceProvider: Provider = {
   provide: STORAGE_SERVICE,
   useFactory: (mockStorage: MockStorageService, s3Storage: S3StorageService): IStorageService => {
-    const driver = (process.env.STORAGE_DRIVER || "mock").toLowerCase().trim();
+    const rawDriver = process.env.STORAGE_DRIVER?.toLowerCase().trim();
+    // Автоопределение S3/Supabase: если настроены эндпоинт или ключи доступа, автоматически используем s3Storage
+    const hasS3Config = Boolean(
+      process.env.S3_ENDPOINT ||
+      process.env.S3_ACCESS_KEY_ID ||
+      process.env.AWS_ACCESS_KEY_ID ||
+      process.env.SUPABASE_URL
+    );
+    const driver = rawDriver || (hasS3Config ? "s3" : "mock");
     if (driver === "s3" || driver === "supabase") {
       return s3Storage;
     }

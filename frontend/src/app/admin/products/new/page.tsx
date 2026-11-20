@@ -403,7 +403,7 @@ export default function AdminNewProductPage() {
           await api.post(`/api/v1/admin/products/${createdProduct.id}/images`, {
             imageUrl: coverImageUrl.trim(),
             altText: title.trim(),
-            displayOrder: 1,
+            displayOrder: 0,
             isCover: true,
           });
         } catch {

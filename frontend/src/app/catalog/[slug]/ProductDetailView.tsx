@@ -109,14 +109,14 @@ const extractCoverImage = (prod?: Product | null): string => {
   const foundCover = prod.images?.find(
     (img: any) => typeof img === "object" && img?.isCover
   );
-  return (
-    (typeof foundCover === "object" ? (foundCover as any).imageUrl : null) ||
-    (prod.images && prod.images.length > 0
-      ? typeof prod.images[0] === "string"
-        ? prod.images[0]
-        : (prod.images[0] as any)?.imageUrl
-      : prod.coverImage || "")
-  );
+  const foundCoverUrl = typeof foundCover === "object" ? (foundCover as any).imageUrl : null;
+  if (foundCoverUrl) return foundCoverUrl;
+  if (prod.coverImage) return prod.coverImage;
+  if (prod.images && prod.images.length > 0) {
+    const firstImg = prod.images[0];
+    return typeof firstImg === "string" ? firstImg : (firstImg as any)?.imageUrl || "";
+  }
+  return "";
 };
 
 const extractInitialVariants = (prod?: Product | null) => {
@@ -314,8 +314,9 @@ export default function ProductDetailView({
   const allImages = useMemo(() => {
     if (!product) return [];
     const list: string[] = [];
-    if (product.coverImage && !list.includes(product.coverImage)) {
-      list.push(product.coverImage);
+    const coverUrl = extractCoverImage(product);
+    if (coverUrl && !list.includes(coverUrl)) {
+      list.push(coverUrl);
     }
     if (product.images) {
       for (const img of product.images) {

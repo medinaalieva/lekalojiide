@@ -317,7 +317,7 @@ export type UpdateFormatPricesDto = z.infer<typeof UpdateFormatPricesSchema>;
 // =============================================================================
 
 export const AddProductImageSchema = z.object({
-  imageUrl: z.string().url({ message: "Некорректный URL изображения" }),
+  imageUrl: z.string().min(1, { message: "URL изображения обязателен" }),
   altText: z.string().trim().max(255).optional().nullable(),
   displayOrder: z.number().int().optional().default(0),
   isCover: z.boolean().optional().default(false),
