@@ -23,18 +23,56 @@ import {
   Layers,
 } from "lucide-react";
 
+interface HomepageConfigState {
+  heroFeatured?: {
+    isEnabled: boolean;
+    isVisible: boolean;
+    productId?: string | null;
+    badge?: string;
+    title?: string;
+    subtitle?: string;
+    description?: string;
+    imageUrl?: string;
+    buttonText?: string;
+    buttonLink?: string;
+    basePrice?: number;
+    bundlePrice?: number | null;
+  };
+  newArrivals?: {
+    isEnabled: boolean;
+    title?: string;
+    subtitle?: string;
+  };
+  bestsellers?: {
+    isEnabled: boolean;
+    title?: string;
+    subtitle?: string;
+  };
+  promoBanner?: {
+    isEnabled: boolean;
+    title?: string;
+    subtitle?: string;
+    description?: string;
+    badge?: string;
+    buttonText?: string;
+    buttonLink?: string;
+  };
+}
+
 export function HomeView() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [homepageConfig, setHomepageConfig] = useState<HomepageConfigState | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"all" | "dresses" | "bottoms" | "new">("all");
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [prodRes, catRes] = await Promise.allSettled([
+        const [prodRes, catRes, homeRes] = await Promise.allSettled([
           api.get<{ success: boolean; data: Product[] }>("/api/v1/catalog/products?limit=24"),
           api.get<{ success: boolean; data: Category[] }>("/api/v1/catalog/categories"),
+          api.get<{ success: boolean; data: HomepageConfigState }>("/api/v1/catalog/homepage"),
         ]);
 
         if (prodRes.status === "fulfilled" && prodRes.value.data) {
@@ -54,6 +92,9 @@ export function HomeView() {
         }
         if (catRes.status === "fulfilled" && catRes.value.data) {
           setCategories(catRes.value.data);
+        }
+        if (homeRes.status === "fulfilled" && homeRes.value.data) {
+          setHomepageConfig(homeRes.value.data);
         }
       } catch (err) {
         console.error("Error loading home page data:", err);
@@ -99,9 +140,21 @@ export function HomeView() {
     return products.slice(0, 8);
   }, [products, activeTab]);
 
-  // Featured flagship image for Hero right column
-  const heroImage =
+  // Featured flagship image fallback for Hero right column
+  const defaultHeroImage =
     "https://susoqzykfmwivajdkvtb.storage.supabase.co/storage/v1/object/public/product-images/products/1cfe5f94-564b-40dc-81ed-f953f5b2239b/1794847456360-bec05e1f-ru8PR-XHAiuIkXL3bVXX2oM_o-VanPASlCx6yM0FfWCP-Qp5x55eVRXgVWp9KqdSPFAg3POjmFb40Z2Ipu4epBkBnu4SeeHi58AJxjASU2zUQRUMjnWkduOmVnzCv11CKnPjKfW5d7dmq2mA5M4nesPNzUIIgrvC0Je_fc1DeOvlTpbxl-Wn6DHufavuRicm.jpg";
+
+  // Dynamic Hero values with safe fallbacks
+  const heroCardVisible = homepageConfig?.heroFeatured?.isVisible !== false;
+  const currentHeroImage = homepageConfig?.heroFeatured?.imageUrl || defaultHeroImage;
+  const currentHeroBadge = homepageConfig?.heroFeatured?.badge || "Хит сезона • Точная посадка";
+  const currentHeroSubtitle = homepageConfig?.heroFeatured?.subtitle || "Флагманская выкройка";
+  const currentHeroTitle = homepageConfig?.heroFeatured?.title || "Платье миди «Аида» с запахом";
+  const currentHeroButtonText = homepageConfig?.heroFeatured?.buttonText || "Смотреть выкройку →";
+  const currentHeroButtonLink =
+    homepageConfig?.heroFeatured?.buttonLink || "/catalog/plate-midi-aida-s-zapakhom";
+  const currentHeroBasePrice = homepageConfig?.heroFeatured?.basePrice ?? 650;
+  const currentHeroBundlePrice = homepageConfig?.heroFeatured?.bundlePrice ?? 1290;
 
   // Pre-mapped standard category groups
   const categoryHighlights = [
@@ -205,73 +258,77 @@ export function HomeView() {
             </div>
 
             {/* Right showcase column - 5 cols (Editorial Fashion Piece) */}
-            <div className="lg:col-span-5 relative">
-              <div className="relative mx-auto max-w-sm sm:max-w-md lg:max-w-none">
-                {/* Decorative border frame */}
-                <div className="absolute -inset-3 bg-gradient-to-tr from-brand-200/50 via-brand-100/20 to-transparent rounded-sm -rotate-1 hidden sm:block pointer-events-none" />
+            {heroCardVisible && (
+              <div className="lg:col-span-5 relative">
+                <div className="relative mx-auto max-w-sm sm:max-w-md lg:max-w-none">
+                  {/* Decorative border frame */}
+                  <div className="absolute -inset-3 bg-gradient-to-tr from-brand-200/50 via-brand-100/20 to-transparent rounded-sm -rotate-1 hidden sm:block pointer-events-none" />
 
-                {/* Main showcase card */}
-                <div className="relative bg-white border border-atelier-border rounded-sm shadow-xl overflow-hidden group">
-                  <div className="relative aspect-[3/4] bg-atelier-subtle overflow-hidden">
-                    <Image
-                      src={heroImage}
-                      alt="Платье миди Аида с запахом — LEKALO ZHIIDE"
-                      fill
-                      priority
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 450px"
-                      className="object-cover object-center group-hover:scale-105 transition-transform duration-700"
-                    />
+                  {/* Main showcase card */}
+                  <div className="relative bg-white border border-atelier-border rounded-sm shadow-xl overflow-hidden group">
+                    <div className="relative aspect-[3/4] bg-atelier-subtle overflow-hidden">
+                      <Image
+                        src={currentHeroImage}
+                        alt={`${currentHeroTitle} — LEKALO ZHIIDE`}
+                        fill
+                        priority
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 450px"
+                        className="object-cover object-center group-hover:scale-105 transition-transform duration-700"
+                      />
 
-                    {/* Gradient shadow for text readability */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-brand-950/80 via-transparent to-black/20" />
+                      {/* Gradient shadow for text readability */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-brand-950/80 via-transparent to-black/20" />
 
-                    {/* Top badges bar - responsive and collision-free */}
-                    <div className="absolute top-3 left-3 right-3 z-10 flex items-center justify-between gap-2 pointer-events-none">
-                      <div className="flex items-center space-x-1.5 px-2.5 py-1 bg-white/95 backdrop-blur-xs text-brand-950 rounded-sm text-[10px] sm:text-xs font-semibold uppercase tracking-wider shadow-sm truncate">
-                        <Sparkles className="w-3.5 h-3.5 text-brand-800 shrink-0" />
-                        <span className="truncate">Хит сезона • Точная посадка</span>
-                      </div>
-
-                      <div className="px-2 py-0.5 bg-brand-900/90 text-white rounded-sm text-[10px] font-mono shadow-sm shrink-0 whitespace-nowrap">
-                        A4 + Плоттер
-                      </div>
-                    </div>
-
-                    {/* Bottom overlay info */}
-                    <div className="absolute bottom-0 left-0 right-0 p-5 text-white z-10">
-                      <span className="text-[11px] uppercase tracking-widest text-brand-200 font-semibold block mb-1">
-                        Флагманская выкройка
-                      </span>
-                      <h3 className="font-serif text-xl sm:text-2xl font-bold leading-snug">
-                        Платье миди «Аида» с запахом
-                      </h3>
-                      <div className="mt-2 flex items-baseline justify-between">
-                        <div>
-                          <span className="text-lg font-bold text-white">
-                            650 KGS
-                          </span>
-                          <span className="text-xs text-brand-200 ml-2">
-                            • или комплект ALL за 1 290 KGS
-                          </span>
+                      {/* Top badges bar - responsive and collision-free */}
+                      <div className="absolute top-3 left-3 right-3 z-10 flex items-center justify-between gap-2 pointer-events-none">
+                        <div className="flex items-center space-x-1.5 px-2.5 py-1 bg-white/95 backdrop-blur-xs text-brand-950 rounded-sm text-[10px] sm:text-xs font-semibold uppercase tracking-wider shadow-sm truncate">
+                          <Sparkles className="w-3.5 h-3.5 text-brand-800 shrink-0" />
+                          <span className="truncate">{currentHeroBadge}</span>
                         </div>
-                        <Link
-                          href="/catalog/plate-midi-aida-s-zapakhom"
-                          className="text-xs font-semibold text-white bg-white/20 hover:bg-white hover:text-brand-950 px-3 py-1.5 rounded-sm transition-colors backdrop-blur-xs"
-                        >
-                          Смотреть выкройку →
-                        </Link>
+
+                        <div className="px-2 py-0.5 bg-brand-900/90 text-white rounded-sm text-[10px] font-mono shadow-sm shrink-0 whitespace-nowrap">
+                          A4 + Плоттер
+                        </div>
+                      </div>
+
+                      {/* Bottom overlay info */}
+                      <div className="absolute bottom-0 left-0 right-0 p-5 text-white z-10">
+                        <span className="text-[11px] uppercase tracking-widest text-brand-200 font-semibold block mb-1">
+                          {currentHeroSubtitle}
+                        </span>
+                        <h3 className="font-serif text-xl sm:text-2xl font-bold leading-snug">
+                          {currentHeroTitle}
+                        </h3>
+                        <div className="mt-2 flex items-baseline justify-between">
+                          <div>
+                            <span className="text-lg font-bold text-white">
+                              {currentHeroBasePrice} KGS
+                            </span>
+                            {currentHeroBundlePrice ? (
+                              <span className="text-xs text-brand-200 ml-2">
+                                • или комплект ALL за {currentHeroBundlePrice} KGS
+                              </span>
+                            ) : null}
+                          </div>
+                          <Link
+                            href={currentHeroButtonLink}
+                            className="text-xs font-semibold text-white bg-white/20 hover:bg-white hover:text-brand-950 px-3 py-1.5 rounded-sm transition-colors backdrop-blur-xs"
+                          >
+                            {currentHeroButtonText}
+                          </Link>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Floating benefit tag below card */}
-                <div className="mt-3 flex items-center justify-between text-[11px] text-atelier-muted px-2">
-                  <span>Размеры 40–60 • Европейская градация</span>
-                  <span className="font-medium text-brand-900">Припуски 1 см заложены</span>
+                  {/* Floating benefit tag below card */}
+                  <div className="mt-3 flex items-center justify-between text-[11px] text-atelier-muted px-2">
+                    <span>Размеры 40–60 • Европейская градация</span>
+                    <span className="font-medium text-brand-900">Припуски 1 см заложены</span>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </section>
@@ -337,10 +394,10 @@ export function HomeView() {
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
             <div>
               <span className="text-xs font-semibold uppercase tracking-widest text-brand-700">
-                Каталог ателье
+                {homepageConfig?.bestsellers?.subtitle || "Каталог ателье"}
               </span>
               <h2 className="font-serif text-2xl sm:text-3xl font-bold text-brand-950 mt-1">
-                Популярные выкройки
+                {homepageConfig?.bestsellers?.title || "Популярные выкройки"}
               </h2>
             </div>
 
@@ -557,27 +614,30 @@ export function HomeView() {
       {/* =================================================================== */}
       {/* 6. CALL TO ACTION BANNER                                            */}
       {/* =================================================================== */}
-      <section className="bg-gradient-to-r from-brand-950 via-brand-900 to-brand-950 text-white py-16">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
-          <span className="text-xs uppercase tracking-widest text-brand-300 font-semibold inline-block">
-            Начните шить прямо сегодня
-          </span>
-          <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight">
-            Создайте свой идеальный гардероб с LEKALO ZHIIDE
-          </h2>
-          <p className="text-sm sm:text-base text-brand-200/90 max-w-2xl mx-auto leading-relaxed">
-            В каталоге собраны платья, юбки, брюки, жакеты и костюмы с точной европейской градацией. Выбирайте выкройку и скачивайте PDF за 2 минуты.
-          </p>
-          <div className="pt-4 flex flex-wrap justify-center gap-4">
-            <Link href="/catalog">
-              <Button size="lg" className="bg-white text-brand-950 hover:bg-brand-100 font-semibold px-8 shadow-md">
-                <span>Перейти в каталог выкроек</span>
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            </Link>
+      {homepageConfig?.promoBanner?.isEnabled !== false && (
+        <section className="bg-gradient-to-r from-brand-950 via-brand-900 to-brand-950 text-white py-16">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
+            <span className="text-xs uppercase tracking-widest text-brand-300 font-semibold inline-block">
+              {homepageConfig?.promoBanner?.badge || "Начните шить прямо сегодня"}
+            </span>
+            <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight">
+              {homepageConfig?.promoBanner?.title || "Создайте свой идеальный гардероб с LEKALO ZHIIDE"}
+            </h2>
+            <p className="text-sm sm:text-base text-brand-200/90 max-w-2xl mx-auto leading-relaxed">
+              {homepageConfig?.promoBanner?.description ||
+                "В каталоге собраны платья, юбки, брюки, жакеты и костюмы с точной европейской градацией. Выбирайте выкройку и скачивайте PDF за 2 минуты."}
+            </p>
+            <div className="pt-4 flex flex-wrap justify-center gap-4">
+              <Link href={homepageConfig?.promoBanner?.buttonLink || "/catalog"}>
+                <Button size="lg" className="bg-white text-brand-950 hover:bg-brand-100 font-semibold px-8 shadow-md">
+                  <span>{homepageConfig?.promoBanner?.buttonText || "Перейти в каталог выкроек"}</span>
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </Link>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
     </div>
   );
 }

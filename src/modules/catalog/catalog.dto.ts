@@ -523,3 +523,27 @@ export const ToggleActiveSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+// =============================================================================
+// 10. Управление главной страницей (Homepage Config)
+// =============================================================================
+
+export const HeroFeaturedConfigSchema = z.object({
+  isEnabled: z.boolean().default(true),
+  productId: z.string().uuid({ message: "Некорректный UUID товара" }).nullable().optional(),
+  badge: z.string().trim().max(100).nullable().optional(),
+  title: z.string().trim().max(255).nullable().optional(),
+  subtitle: z.string().trim().max(255).nullable().optional(),
+  description: z.string().trim().max(1000).nullable().optional(),
+  imageUrl: z.string().trim().nullable().optional(),
+  buttonText: z.string().trim().max(100).nullable().optional(),
+  buttonLink: z.string().trim().max(500).nullable().optional(),
+  startDate: z.string().nullable().optional(),
+  endDate: z.string().nullable().optional(),
+});
+export type HeroFeaturedConfigDto = z.infer<typeof HeroFeaturedConfigSchema>;
+
+export const UpdateHomepageBlockSchema = z.object({
+  data: z.record(z.string(), z.any()).optional(),
+}).passthrough();
+export type UpdateHomepageBlockDto = z.infer<typeof UpdateHomepageBlockSchema>;
+

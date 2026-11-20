@@ -16,11 +16,13 @@ import {
   Lock,
   Ruler,
   SlidersHorizontal,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 
 const ADMIN_NAV_ITEMS = [
   { href: "/admin", label: "Обзор", icon: LayoutDashboard },
+  { href: "/admin/homepage", label: "Главная страница", icon: Sparkles },
   { href: "/admin/products", label: "Выкройки", icon: Package },
   { href: "/admin/categories", label: "Категории", icon: FolderTree },
   { href: "/admin/sizes", label: "Размеры", icon: Ruler },

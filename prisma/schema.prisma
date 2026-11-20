@@ -527,3 +527,12 @@ model AuditLog {
 
   @@map("audit_logs")
 }
+
+model HomepageConfig {
+  id        String   @id @db.VarChar(50)
+  data      Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("homepage_config")
+}

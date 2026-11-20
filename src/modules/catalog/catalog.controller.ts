@@ -99,4 +99,19 @@ export class CatalogController {
       meta: { timestamp: new Date().toISOString() },
     };
   }
+
+  /**
+   * GET /api/v1/catalog/homepage
+   * Конфигурация динамических блоков главной страницы витрины
+   */
+  @Get("homepage")
+  @HttpCode(HttpStatus.OK)
+  async getHomepage() {
+    const data = await this.catalogService.getHomepageConfig(true);
+    return {
+      success: true,
+      data,
+      meta: { timestamp: new Date().toISOString() },
+    };
+  }
 }

@@ -1964,4 +1964,230 @@ export class CatalogService {
 
     return { success: true, message: `Формат '${format.code}' успешно удален` };
   }
+
+  // ===========================================================================
+  // УПРАВЛЕНИЕ ГЛАВНОЙ СТРАНИЦЕЙ (HOMEPAGE CONFIG)
+  // ===========================================================================
+
+  /**
+   * Получение конфигурации главной страницы
+   * @param isPublic флаг публичного запроса (если true, фильтрует по датам и активности)
+   */
+  async getHomepageConfig(isPublic = true) {
+    const records = await this.prisma.homepageConfig.findMany();
+    const configMap: Record<string, any> = {};
+    for (const r of records) {
+      configMap[r.id] = r.data;
+    }
+
+    // Базовые настройки блока "Хит сезона"
+    const heroRaw = configMap["hero_featured"] || {
+      isEnabled: true,
+      productId: null,
+      badge: "Хит сезона • Точная посадка",
+      title: "Платье миди «Аида» с запахом",
+      subtitle: "Флагманская выкройка",
+      description:
+        "Профессиональные электронные лекала с точной градацией размеров (40–60), заложенными припусками на швы и подробными инструкциями по пошиву.",
+      imageUrl:
+        "https://susoqzykfmwivajdkvtb.storage.supabase.co/storage/v1/object/public/product-images/products/1cfe5f94-564b-40dc-81ed-f953f5b2239b/1794847456360-bec05e1f-ru8PR-XHAiuIkXL3bVXX2oM_o-VanPASlCx6yM0FfWCP-Qp5x55eVRXgVWp9KqdSPFAg3POjmFb40Z2Ipu4epBkBnu4SeeHi58AJxjASU2zUQRUMjnWkduOmVnzCv11CKnPjKfW5d7dmq2mA5M4nesPNzUIIgrvC0Je_fc1DeOvlTpbxl-Wn6DHufavuRicm.jpg",
+      buttonText: "Смотреть выкройку →",
+      buttonLink: "/catalog/plate-midi-aida-s-zapakhom",
+      startDate: null,
+      endDate: null,
+    };
+
+    // Расчет видимости с учетом дат публикации
+    let isVisible = heroRaw.isEnabled !== false;
+    const now = new Date();
+    if (heroRaw.startDate && new Date(heroRaw.startDate) > now) {
+      isVisible = false;
+    }
+    if (heroRaw.endDate && new Date(heroRaw.endDate) < now) {
+      isVisible = false;
+    }
+
+    let resolvedProduct: any = null;
+    if (heroRaw.productId) {
+      try {
+        const prod = await this.prisma.product.findUnique({
+          where: { id: heroRaw.productId },
+          include: {
+            category: { select: { id: true, title: true, slug: true } },
+            images: { orderBy: { displayOrder: "asc" } },
+          },
+        });
+        if (prod && (!isPublic || prod.isActive)) {
+          const cover =
+            prod.images.find((i) => i.isCover)?.imageUrl ||
+            prod.images[0]?.imageUrl ||
+            null;
+          const pricing = calculateEffectivePrice({
+            basePrice: prod.basePrice,
+            discountPrice: prod.discountPrice,
+            discountFrom: prod.discountFrom,
+            discountUntil: prod.discountUntil,
+            bundlePrice: prod.bundlePrice,
+          });
+          resolvedProduct = {
+            id: prod.id,
+            title: prod.title,
+            slug: prod.slug,
+            basePrice: pricing.originalPrice,
+            currentPrice: pricing.currentPrice,
+            isDiscountActive: pricing.isDiscountActive,
+            discountPercent: pricing.discountPercent,
+            bundlePrice: prod.bundlePrice ? Number(prod.bundlePrice) : null,
+            coverImage: cover,
+            images: prod.images.map((i) => i.imageUrl),
+            categoryTitle: prod.category?.title,
+          };
+        }
+      } catch (e) {
+        console.error("Error resolving hero product:", e);
+      }
+    }
+
+    const finalHero = {
+      isEnabled: heroRaw.isEnabled !== false,
+      isVisible,
+      productId: heroRaw.productId || null,
+      badge: heroRaw.badge || "Хит сезона • Точная посадка",
+      title: heroRaw.title || resolvedProduct?.title || "Платье миди «Аида» с запахом",
+      subtitle: heroRaw.subtitle || "Флагманская выкройка",
+      description:
+        heroRaw.description ||
+        "Профессиональные электронные лекала с точной градацией размеров (40–60), заложенными припусками на швы и подробными инструкциями по пошиву.",
+      imageUrl:
+        heroRaw.imageUrl ||
+        resolvedProduct?.coverImage ||
+        "https://susoqzykfmwivajdkvtb.storage.supabase.co/storage/v1/object/public/product-images/products/1cfe5f94-564b-40dc-81ed-f953f5b2239b/1794847456360-bec05e1f-ru8PR-XHAiuIkXL3bVXX2oM_o-VanPASlCx6yM0FfWCP-Qp5x55eVRXgVWp9KqdSPFAg3POjmFb40Z2Ipu4epBkBnu4SeeHi58AJxjASU2zUQRUMjnWkduOmVnzCv11CKnPjKfW5d7dmq2mA5M4nesPNzUIIgrvC0Je_fc1DeOvlTpbxl-Wn6DHufavuRicm.jpg",
+      buttonText: heroRaw.buttonText || "Смотреть выкройку →",
+      buttonLink:
+        heroRaw.buttonLink ||
+        (resolvedProduct?.slug
+          ? `/catalog/${resolvedProduct.slug}`
+          : "/catalog/plate-midi-aida-s-zapakhom"),
+      startDate: heroRaw.startDate || null,
+      endDate: heroRaw.endDate || null,
+      basePrice: resolvedProduct?.currentPrice ?? 650,
+      bundlePrice: resolvedProduct?.bundlePrice ?? 1290,
+      product: resolvedProduct,
+    };
+
+    const newArrivalsRaw = configMap["new_arrivals"] || {
+      isEnabled: true,
+      title: "Новинки сезона",
+      subtitle: "Свежие выкройки с безупречной посадкой",
+    };
+
+    const bestsellersRaw = configMap["bestsellers"] || {
+      isEnabled: true,
+      title: "Популярные выкройки",
+      subtitle: "Выбор покупателей LEKALO ZHIIDE",
+    };
+
+    const promoBannerRaw = configMap["promo_banner"] || {
+      isEnabled: true,
+      title: "Создайте свой идеальный гардероб с LEKALO ZHIIDE",
+      subtitle: "Цифровые лекала ресторанного и подиумного уровня",
+      description:
+        "В каталоге собраны платья, юбки, брюки, жакеты и костюмы с точной европейской градацией. Выбирайте выкройку и скачивайте PDF за 2 минуты.",
+      badge: "Начните шить прямо сегодня",
+      buttonText: "Перейти в каталог выкроек",
+      buttonLink: "/catalog",
+      imageUrl: null,
+    };
+
+    return {
+      heroFeatured: finalHero,
+      newArrivals: newArrivalsRaw,
+      bestsellers: bestsellersRaw,
+      promoBanner: promoBannerRaw,
+    };
+  }
+
+  /**
+   * Получение данных для панели администратора главной страницы
+   */
+  async getHomepageAdminData() {
+    const [config, products] = await Promise.all([
+      this.getHomepageConfig(false),
+      this.prisma.product.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          basePrice: true,
+          bundlePrice: true,
+          discountPrice: true,
+          category: { select: { title: true } },
+          images: {
+            orderBy: { displayOrder: "asc" },
+            select: { imageUrl: true, isCover: true },
+          },
+        },
+        orderBy: { title: "asc" },
+      }),
+    ]);
+
+    const formattedProducts = products.map((p) => {
+      const cover =
+        p.images.find((i) => i.isCover)?.imageUrl || p.images[0]?.imageUrl || "";
+      return {
+        id: p.id,
+        title: p.title,
+        slug: p.slug,
+        basePrice: Number(p.basePrice),
+        bundlePrice: p.bundlePrice ? Number(p.bundlePrice) : null,
+        categoryTitle: p.category?.title || "",
+        coverImage: cover,
+        images: p.images.map((i) => i.imageUrl),
+      };
+    });
+
+    return {
+      config,
+      products: formattedProducts,
+    };
+  }
+
+  /**
+   * Обновление блока главной страницы
+   */
+  async updateHomepageBlock(blockId: string, payload: any) {
+    const validBlocks = ["hero_featured", "new_arrivals", "bestsellers", "promo_banner"];
+    if (!validBlocks.includes(blockId)) {
+      throw new BadRequestError(
+        "INVALID_BLOCK_ID",
+        `Неизвестный блок главной страницы: ${blockId}. Разрешены: ${validBlocks.join(", ")}`
+      );
+    }
+
+    const data = payload?.data !== undefined ? payload.data : payload;
+
+    const existing = await this.prisma.homepageConfig.findUnique({
+      where: { id: blockId },
+    });
+
+    const mergedData =
+      existing?.data && typeof existing.data === "object"
+        ? { ...(existing.data as object), ...data }
+        : data;
+
+    await this.prisma.homepageConfig.upsert({
+      where: { id: blockId },
+      create: {
+        id: blockId,
+        data: mergedData,
+      },
+      update: {
+        data: mergedData,
+        updatedAt: new Date(),
+      },
+    });
+
+    return this.getHomepageConfig(false);
+  }
 }

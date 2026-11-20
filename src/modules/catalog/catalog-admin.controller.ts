@@ -910,4 +910,44 @@ export class CatalogAdminController {
       meta: { timestamp: new Date().toISOString() },
     };
   }
+
+  // ===========================================================================
+  // УПРАВЛЕНИЕ ГЛАВНОЙ СТРАНИЦЕЙ (ADMIN)
+  // ===========================================================================
+
+  /**
+   * GET /api/v1/admin/homepage
+   * Получение настроек всех блоков главной страницы и списка товаров для селектора
+   */
+  @Get("homepage")
+  @HttpCode(HttpStatus.OK)
+  async getHomepageAdmin(@Req() req: FastifyRequest) {
+    this.authenticateAdmin(req);
+    const data = await this.catalogService.getHomepageAdminData();
+    return {
+      success: true,
+      data,
+      meta: { timestamp: new Date().toISOString() },
+    };
+  }
+
+  /**
+   * PUT /api/v1/admin/homepage/:blockId
+   * Обновление настроек блока главной страницы (hero_featured, new_arrivals, bestsellers, promo_banner)
+   */
+  @Put("homepage/:blockId")
+  @HttpCode(HttpStatus.OK)
+  async updateHomepageBlock(
+    @Param("blockId") blockId: string,
+    @Body() body: any,
+    @Req() req: FastifyRequest
+  ) {
+    this.authenticateAdmin(req);
+    const data = await this.catalogService.updateHomepageBlock(blockId, body);
+    return {
+      success: true,
+      data,
+      meta: { timestamp: new Date().toISOString() },
+    };
+  }
 }
