@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { HomeView } from "./HomeView";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: {
     absolute: "LEKALO ZHIIDE — Профессиональные цифровые выкройки одежды в PDF",

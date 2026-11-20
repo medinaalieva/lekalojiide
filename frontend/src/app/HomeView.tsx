@@ -37,6 +37,17 @@ interface HomepageConfigState {
     buttonLink?: string;
     basePrice?: number;
     bundlePrice?: number | null;
+    product?: {
+      id?: string;
+      title?: string;
+      slug?: string;
+      basePrice?: number;
+      currentPrice?: number;
+      bundlePrice?: number | null;
+      coverImage?: string | null;
+      images?: string[];
+      categoryTitle?: string;
+    } | null;
   };
   newArrivals?: {
     isEnabled: boolean;
@@ -65,6 +76,7 @@ export function HomeView() {
   const [homepageConfig, setHomepageConfig] = useState<HomepageConfigState | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"all" | "dresses" | "bottoms" | "new">("all");
+  const [heroImgError, setHeroImgError] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -75,20 +87,29 @@ export function HomeView() {
           api.get<{ success: boolean; data: HomepageConfigState }>("/api/v1/catalog/homepage"),
         ]);
 
-        if (prodRes.status === "fulfilled" && prodRes.value.data) {
-          // Prioritize genuine garment photos from Supabase Storage for the homepage showcase
-          const sorted = [...prodRes.value.data].sort((a, b) => {
-            const imgA = a.coverImage || (typeof a.images?.[0] === "string" ? a.images[0] : (a.images?.[0] as any)?.imageUrl) || "";
-            const imgB = b.coverImage || (typeof b.images?.[0] === "string" ? b.images[0] : (b.images?.[0] as any)?.imageUrl) || "";
-            const isSupaA = imgA.includes("supabase.co");
-            const isSupaB = imgB.includes("supabase.co");
-            if (isSupaA && !isSupaB) return -1;
-            if (!isSupaA && isSupaB) return 1;
-            if (imgA && !imgB) return -1;
-            if (!imgA && imgB) return 1;
-            return 0;
-          });
-          setProducts(sorted);
+        if (prodRes.status === "fulfilled" && prodRes.value) {
+          const rawProds: Product[] = Array.isArray(prodRes.value.data)
+            ? prodRes.value.data
+            : Array.isArray((prodRes.value as any)?.items)
+            ? (prodRes.value as any).items
+            : Array.isArray(prodRes.value)
+            ? (prodRes.value as any)
+            : [];
+          if (rawProds.length > 0) {
+            // Prioritize genuine garment photos from Supabase Storage for the homepage showcase
+            const sorted = [...rawProds].sort((a, b) => {
+              const imgA = a.coverImage || (typeof a.images?.[0] === "string" ? a.images[0] : (a.images?.[0] as any)?.imageUrl) || "";
+              const imgB = b.coverImage || (typeof b.images?.[0] === "string" ? b.images[0] : (b.images?.[0] as any)?.imageUrl) || "";
+              const isSupaA = imgA.includes("supabase.co");
+              const isSupaB = imgB.includes("supabase.co");
+              if (isSupaA && !isSupaB) return -1;
+              if (!isSupaA && isSupaB) return 1;
+              if (imgA && !imgB) return -1;
+              if (!imgA && imgB) return 1;
+              return 0;
+            });
+            setProducts(sorted);
+          }
         }
         if (catRes.status === "fulfilled" && catRes.value.data) {
           setCategories(catRes.value.data);
@@ -146,15 +167,37 @@ export function HomeView() {
 
   // Dynamic Hero values with safe fallbacks
   const heroCardVisible = homepageConfig?.heroFeatured?.isVisible !== false;
-  const currentHeroImage = homepageConfig?.heroFeatured?.imageUrl || defaultHeroImage;
+  const currentHeroImage =
+    homepageConfig?.heroFeatured?.product?.coverImage ||
+    (homepageConfig?.heroFeatured?.imageUrl && !homepageConfig.heroFeatured.imageUrl.includes("princessdress.ru")
+      ? homepageConfig.heroFeatured.imageUrl
+      : null) ||
+    homepageConfig?.heroFeatured?.product?.images?.[0] ||
+    defaultHeroImage;
   const currentHeroBadge = homepageConfig?.heroFeatured?.badge || "Хит сезона • Точная посадка";
   const currentHeroSubtitle = homepageConfig?.heroFeatured?.subtitle || "Флагманская выкройка";
-  const currentHeroTitle = homepageConfig?.heroFeatured?.title || "Платье миди «Аида» с запахом";
+  const currentHeroTitle =
+    homepageConfig?.heroFeatured?.product?.title ||
+    homepageConfig?.heroFeatured?.title ||
+    "Платье миди «Аида» с запахом";
   const currentHeroButtonText = homepageConfig?.heroFeatured?.buttonText || "Смотреть выкройку →";
   const currentHeroButtonLink =
-    homepageConfig?.heroFeatured?.buttonLink || "/catalog/plate-midi-aida-s-zapakhom";
-  const currentHeroBasePrice = homepageConfig?.heroFeatured?.basePrice ?? 650;
-  const currentHeroBundlePrice = homepageConfig?.heroFeatured?.bundlePrice ?? 1290;
+    (homepageConfig?.heroFeatured?.product?.slug
+      ? `/catalog/${homepageConfig.heroFeatured.product.slug}`
+      : null) ||
+    (homepageConfig?.heroFeatured?.buttonLink &&
+    !homepageConfig.heroFeatured.buttonLink.endsWith(".jpg") &&
+    !homepageConfig.heroFeatured.buttonLink.endsWith(".png")
+      ? homepageConfig.heroFeatured.buttonLink
+      : "/catalog/plat-e-midi-aida-s-zapakhom");
+  const currentHeroBasePrice =
+    homepageConfig?.heroFeatured?.product?.currentPrice ??
+    homepageConfig?.heroFeatured?.basePrice ??
+    450;
+  const currentHeroBundlePrice =
+    homepageConfig?.heroFeatured?.product?.bundlePrice ??
+    homepageConfig?.heroFeatured?.bundlePrice ??
+    1200;
 
   // Pre-mapped standard category groups
   const categoryHighlights = [
@@ -267,17 +310,24 @@ export function HomeView() {
                   {/* Main showcase card */}
                   <div className="relative bg-white border border-atelier-border rounded-sm shadow-xl overflow-hidden group">
                     <div className="relative aspect-[3/4] bg-atelier-subtle overflow-hidden">
-                      <Image
-                        src={currentHeroImage}
-                        alt={`${currentHeroTitle} — LEKALO ZHIIDE`}
-                        fill
-                        priority
-                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 450px"
-                        className="object-cover object-center group-hover:scale-105 transition-transform duration-700"
-                      />
+                      {currentHeroImage && !heroImgError ? (
+                        <img
+                          src={currentHeroImage}
+                          alt={`${currentHeroTitle} — LEKALO ZHIIDE`}
+                          className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700"
+                          onError={() => setHeroImgError(true)}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center p-6 text-atelier-muted bg-gradient-to-b from-brand-900 to-brand-950">
+                          <Scissors className="w-12 h-12 stroke-[1.4] text-brand-300 mb-2" />
+                          <span className="text-xs text-brand-200 uppercase tracking-wider font-medium">
+                            LEKALO ZHIIDE
+                          </span>
+                        </div>
+                      )}
 
                       {/* Gradient shadow for text readability */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-brand-950/80 via-transparent to-black/20" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-brand-950/80 via-transparent to-black/20 pointer-events-none" />
 
                       {/* Top badges bar - responsive and collision-free */}
                       <div className="absolute top-3 left-3 right-3 z-10 flex items-center justify-between gap-2 pointer-events-none">

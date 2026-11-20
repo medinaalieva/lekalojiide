@@ -2079,14 +2079,18 @@ export class CatalogService {
         heroRaw.description ||
         "Профессиональные электронные лекала с точной градацией размеров (40–60), заложенными припусками на швы и подробными инструкциями по пошиву.",
       imageUrl:
-        heroRaw.imageUrl ||
         resolvedProduct?.coverImage ||
+        (heroRaw.imageUrl && !heroRaw.imageUrl.includes("princessdress.ru")
+          ? heroRaw.imageUrl
+          : null) ||
         "https://susoqzykfmwivajdkvtb.storage.supabase.co/storage/v1/object/public/product-images/products/1cfe5f94-564b-40dc-81ed-f953f5b2239b/1794847456360-bec05e1f-ru8PR-XHAiuIkXL3bVXX2oM_o-VanPASlCx6yM0FfWCP-Qp5x55eVRXgVWp9KqdSPFAg3POjmFb40Z2Ipu4epBkBnu4SeeHi58AJxjASU2zUQRUMjnWkduOmVnzCv11CKnPjKfW5d7dmq2mA5M4nesPNzUIIgrvC0Je_fc1DeOvlTpbxl-Wn6DHufavuRicm.jpg",
       buttonText: heroRaw.buttonText || "Смотреть выкройку →",
       buttonLink:
-        heroRaw.buttonLink ||
         (resolvedProduct?.slug
           ? `/catalog/${resolvedProduct.slug}`
+          : null) ||
+        (heroRaw.buttonLink && !heroRaw.buttonLink.endsWith(".jpg") && !heroRaw.buttonLink.endsWith(".png")
+          ? heroRaw.buttonLink
           : "/catalog/plate-midi-aida-s-zapakhom"),
       startDate: heroRaw.startDate || null,
       endDate: heroRaw.endDate || null,

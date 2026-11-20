@@ -21,7 +21,10 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
   const difficulty = product.difficulty || (product as any).difficultyLevel || product.complexity;
 
   // Resolve cover image safely
-  let coverImageUrl: string | undefined = product.coverImage;
+  let coverImageUrl: string | undefined =
+    typeof product.coverImage === "string"
+      ? product.coverImage
+      : (product.coverImage as any)?.imageUrl;
   if (!coverImageUrl && product.images && product.images.length > 0) {
     const coverObj = (product.images as any[]).find((img) => typeof img === "object" && img?.isCover);
     const firstImg = product.images[0];
