@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useState, use } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
+import { useParams, useSearchParams } from "next/navigation";
 import { api } from "../../../../../lib/api";
 import { Button } from "../../../../../components/ui/Button";
 import { Badge } from "../../../../../components/ui/Badge";
@@ -125,15 +126,26 @@ export interface BulkFileItem {
 export default function ProductFilesPage({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  params?: { id: string };
 }) {
-  const unwrappedParams = typeof (params as any).then === "function" ? use(params as Promise<{ id: string }>) : (params as { id: string });
-  const productId = unwrappedParams.id;
+  const routeParams = useParams();
+  const searchParams = useSearchParams();
+  const productId = (routeParams?.id as string) || (params as any)?.id || "";
+  const tabQuery = searchParams?.get("tab");
 
   const [product, setProduct] = useState<ProductStorageDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"patterns" | "images" | "instructions">("patterns");
+  const [activeTab, setActiveTab] = useState<"patterns" | "images" | "instructions">(
+    tabQuery === "images" ? "images" : tabQuery === "instructions" ? "instructions" : "patterns"
+  );
+
+  useEffect(() => {
+    const tab = searchParams?.get("tab");
+    if (tab === "images" || tab === "instructions" || tab === "patterns") {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   // Matrix Filter State
   const [fileFilter, setFileFilter] = useState<"ALL" | "MISSING" | "HAS_FILE">("ALL");
@@ -194,6 +206,19 @@ export default function ProductFilesPage({
   const [formatPriceInputValue, setFormatPriceInputValue] = useState<string>("");
   const [isSavingFormatPrices, setIsSavingFormatPrices] = useState<boolean>(false);
   const [formatPriceError, setFormatPriceError] = useState<string | null>(null);
+  const [autoCanonicalRename, setAutoCanonicalRename] = useState<boolean>(true);
+
+  // Unique formats for bulk price setting (Stage 5.25)
+  const variants = product?.variants || [];
+  const uniqueFormats = useMemo(() => {
+    const map = new Map<string, { id: string; code: string; label?: string }>();
+    variants.forEach((v) => {
+      if (v.format && !map.has(v.format.id)) {
+        map.set(v.format.id, v.format);
+      }
+    });
+    return Array.from(map.values());
+  }, [variants]);
 
   const handleSaveVariantPrice = async (variantId: string, price: number | null) => {
     setIsSavingPrice(true);
@@ -445,13 +470,10 @@ export default function ProductFilesPage({
   // Назначение обложки
   const handleSetCover = async (imageId: string) => {
     try {
-      await api.post(`/api/v1/admin/products/${productId}/images`, {
-        imageUrl: product?.images.find((i) => i.id === imageId)?.imageUrl,
-        isCover: true,
-      });
+      await api.patch(`/api/v1/admin/storage/images/${imageId}/cover`, {});
       await fetchDetails();
     } catch (err: any) {
-      alert(`Ошибка: ${err?.message || "Действие отклонено"}`);
+      alert(`Ошибка назначения обложки: ${err?.message || "Действие отклонено"}`);
     }
   };
 
@@ -476,10 +498,10 @@ export default function ProductFilesPage({
       ? `${product.slug}-${selectedVariant.size?.code}-${selectedVariant.height?.code}-${selectedVariant.format?.code}.pdf`
       : "";
 
-    if (expectedName && file.name.trim() !== expectedName) {
+    if (expectedName && file.name.trim().toLowerCase() !== expectedName.toLowerCase() && !autoCanonicalRename) {
       setPdfMessage({
         type: "error",
-        text: `Несоответствие имени файла! Выбран "${file.name}", но для этого варианта требуется "${expectedName}". Загрузка заблокирована во избежание ошибки в размере.`
+        text: `Несоответствие имени файла! Выбран "${file.name}", но для этого варианта требуется "${expectedName}". Включите автопереименование или назовите файл по стандарту.`
       });
     } else {
       setPdfMessage(null);
@@ -513,22 +535,24 @@ export default function ProductFilesPage({
         if (!pdfFileBase64) {
           throw new Error("Пожалуйста, выберите файл PDF на компьютере");
         }
-        if (pdfFileName.trim() !== expectedName) {
+        const effectiveName = autoCanonicalRename ? expectedName : pdfFileName.trim();
+        if (effectiveName.toLowerCase() !== expectedName.toLowerCase()) {
           throw new Error(`Имя файла "${pdfFileName}" не соответствует выбранному варианту SKU (${selectedVariant.sku}). Ожидалось: "${expectedName}". Загрузка отклонена.`);
         }
         payload.fileBase64 = pdfFileBase64;
-        payload.fileName = pdfFileName;
+        payload.fileName = effectiveName;
         payload.contentType = "application/pdf";
       } else {
         if (!pdfUrlInput.trim()) {
           throw new Error("Пожалуйста, введите URL для скачивания PDF");
         }
         const urlFileName = pdfUrlInput.trim().split("/").pop()?.split("?")[0] || "";
-        if (urlFileName !== expectedName) {
+        const effectiveName = autoCanonicalRename ? expectedName : urlFileName;
+        if (effectiveName.toLowerCase() !== expectedName.toLowerCase()) {
           throw new Error(`Имя файла в URL "${urlFileName}" не соответствует ожидаемому "${expectedName}".`);
         }
         payload.url = pdfUrlInput.trim();
-        payload.fileName = urlFileName;
+        payload.fileName = effectiveName;
       }
 
       await api.post("/api/v1/admin/storage/upload-pattern", payload);
@@ -661,7 +685,7 @@ export default function ProductFilesPage({
       currentBatchNames.add(fileName);
 
       // 3. Проверка соответствия слагу товара
-      if (!fileName.startsWith(product.slug + "-")) {
+      if (!fileName.toLowerCase().startsWith(product.slug.toLowerCase() + "-")) {
         newItems.push({
           id,
           file,
@@ -677,7 +701,7 @@ export default function ProductFilesPage({
       // 4. Поиск соответствующего варианта в каталоге
       const matchedVariant = product.variants?.find((v) => {
         const expectedName = `${product.slug}-${v.size?.code}-${v.height?.code}-${v.format?.code}.pdf`;
-        return expectedName === fileName;
+        return expectedName.toLowerCase() === fileName.toLowerCase();
       });
 
       if (!matchedVariant) {
@@ -828,7 +852,7 @@ export default function ProductFilesPage({
         validItems.map(async (item) => {
           const base64 = await readFileAsBase64(item.file);
           return {
-            fileName: item.fileName,
+            fileName: item.expectedFileName || item.fileName,
             fileBase64: base64,
             variantId: item.matchedVariant?.id,
             allowOverwrite: item.allowOverwrite,
@@ -914,7 +938,6 @@ export default function ProductFilesPage({
   }
 
   // Bundle Completeness Analysis
-  const variants = product.variants || [];
   const totalVariants = variants.length;
   const variantsWithFile = variants.filter((v) => {
     const file = v.digitalFiles?.find((f) => f.fileType === "PATTERN" && f.isActive) || v.digitalFiles?.[0];
@@ -942,17 +965,6 @@ export default function ProductFilesPage({
 
     return true;
   });
-
-  // Unique formats for bulk price setting (Stage 5.25)
-  const uniqueFormats = React.useMemo(() => {
-    const map = new Map<string, { id: string; code: string; label?: string }>();
-    variants.forEach((v) => {
-      if (v.format && !map.has(v.format.id)) {
-        map.set(v.format.id, v.format);
-      }
-    });
-    return Array.from(map.values());
-  }, [variants]);
 
   // Bulk upload counts (Stage 5.6)
   const readyCount = bulkFiles.filter((f) => f.status === "READY").length;
@@ -1714,7 +1726,7 @@ export default function ProductFilesPage({
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {product.images.map((img) => (
+                {(product.images || []).map((img) => (
                   <div
                     key={img.id}
                     className={`group relative bg-atelier-surface border rounded-sm overflow-hidden flex flex-col justify-between transition-all ${
@@ -2120,7 +2132,7 @@ export default function ProductFilesPage({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-atelier-border">
-                    {product.instructions.map((inst) => (
+                    {(product.instructions || []).map((inst) => (
                       <tr
                         key={inst.id}
                         className={`transition-colors ${
@@ -2343,29 +2355,50 @@ export default function ProductFilesPage({
 
                 if (!currentName || !modalExpected) return null;
 
-                const isMatch = currentName === modalExpected;
+                const isExactMatch = currentName === modalExpected;
+                const isCaseMatch = currentName.toLowerCase() === modalExpected.toLowerCase();
+                const isAllowed = isExactMatch || isCaseMatch || autoCanonicalRename;
 
                 return (
-                  <div
-                    className={`p-2.5 rounded text-xs flex items-center space-x-2 ${
-                      isMatch
-                        ? "bg-emerald-50 text-emerald-900 border border-emerald-300"
-                        : "bg-red-50 text-red-900 border border-red-300"
-                    }`}
-                  >
-                    {isMatch ? (
-                      <>
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>✓ Имя файла точно соответствует стандарту ({currentName})</span>
-                      </>
-                    ) : (
-                      <>
-                        <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-                        <span>
-                          ❌ Несоответствие: выбран &quot;{currentName}&quot;, требуется &quot;{modalExpected}&quot;. Загрузка заблокирована во избежание ошибки в размере.
-                        </span>
-                      </>
-                    )}
+                  <div className="space-y-2">
+                    <div
+                      className={`p-2.5 rounded text-xs flex items-center space-x-2 ${
+                        isAllowed
+                          ? "bg-emerald-50 text-emerald-900 border border-emerald-300"
+                          : "bg-red-50 text-red-900 border border-red-300"
+                      }`}
+                    >
+                      {isExactMatch ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>✓ Имя файла точно соответствует стандарту ({currentName})</span>
+                        </>
+                      ) : isAllowed ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>
+                            ✓ Файл &quot;{currentName}&quot; будет сохранён как: <strong className="font-mono">{modalExpected}</strong>
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                          <span>
+                            ❌ Несоответствие: выбран &quot;{currentName}&quot;, требуется &quot;{modalExpected}&quot;.
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    <label className="flex items-center space-x-2 text-xs text-atelier-charcoal cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={autoCanonicalRename}
+                        onChange={(e) => setAutoCanonicalRename(e.target.checked)}
+                        className="rounded border-atelier-border text-brand-900 focus:ring-brand-500"
+                      />
+                      <span>Привести имя файла к каноническому стандарту (<code className="font-mono font-bold text-[11px]">{modalExpected}</code>)</span>
+                    </label>
                   </div>
                 );
               })()}
@@ -2400,7 +2433,11 @@ export default function ProductFilesPage({
                   const currentName = pdfUploadType === "file"
                     ? pdfFileName.trim()
                     : (pdfUrlInput.trim().split("/").pop()?.split("?")[0] || "").trim();
-                  const isMatching = currentName === modalExpected;
+                  const isMatching = !currentName || (
+                    currentName === modalExpected ||
+                    currentName.toLowerCase() === modalExpected.toLowerCase() ||
+                    autoCanonicalRename
+                  );
 
                   return (
                     <Button
@@ -2409,6 +2446,7 @@ export default function ProductFilesPage({
                       isLoading={isUploadingPdf}
                       disabled={
                         isUploadingPdf ||
+                        !currentName ||
                         !isMatching ||
                         (pdfUploadType === "file" ? !pdfFileBase64 : !pdfUrlInput.trim())
                       }

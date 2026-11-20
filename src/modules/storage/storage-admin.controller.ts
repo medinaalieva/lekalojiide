@@ -335,7 +335,7 @@ export class StorageAdminController {
     const expectedFileName = `${variant.product.slug}-${variant.size.code}-${variant.height.code}-${variant.format.code}.pdf`;
     const cleanOriginalName = path.basename(originalName).trim();
 
-    if (cleanOriginalName !== expectedFileName) {
+    if (cleanOriginalName.toLowerCase() !== expectedFileName.toLowerCase()) {
       throw new BadRequestError(
         "FILENAME_VARIANT_MISMATCH",
         `Имя загружаемого файла "${cleanOriginalName}" не соответствует выбранному варианту SKU (${variant.sku}). Ожидалось каноническое имя: "${expectedFileName}"`
@@ -947,6 +947,42 @@ export class StorageAdminController {
   }
 
   /**
+   * PATCH /api/v1/admin/storage/images/:imageId/cover
+   * Назначение фотографии главной обложкой выкройки
+   */
+  @Patch("images/:imageId/cover")
+  @HttpCode(HttpStatus.OK)
+  async setImageAsCover(@Param("imageId") imageId: string, @Req() req: FastifyRequest) {
+    this.authenticateAdmin(req);
+
+    const image = await this.prisma.productImage.findUnique({
+      where: { id: imageId },
+    });
+
+    if (!image) {
+      throw new NotFoundError("IMAGE_NOT_FOUND", "Изображение не найдено");
+    }
+
+    // Сбрасываем обложку у всех остальных изображений товара
+    await this.prisma.productImage.updateMany({
+      where: { productId: image.productId },
+      data: { isCover: false },
+    });
+
+    // Назначаем текущее изображение обложкой
+    const updated = await this.prisma.productImage.update({
+      where: { id: imageId },
+      data: { isCover: true },
+    });
+
+    return {
+      success: true,
+      data: updated,
+      meta: { timestamp: new Date().toISOString() },
+    };
+  }
+
+  /**
    * DELETE /api/v1/admin/storage/variants/:variantId/files/:versionId
    * Удаление конкретной версии файла из хранилища и базы
    */
@@ -973,19 +1009,19 @@ export class StorageAdminController {
     }
 
     // Удаляем из S3
-    await this.storageService.deleteFile({
-      bucket: version.s3Bucket,
-      key: version.s3Key,
-    });
+    try {
+      await this.storageService.deleteFile({
+        bucket: version.s3Bucket,
+        key: version.s3Key,
+      });
+    } catch (s3Err) {
+      console.warn("Could not delete file from S3:", s3Err);
+    }
 
     const digitalFile = version.digitalFile;
 
-    // Удаляем версию из БД
-    await this.prisma.fileVersion.delete({
-      where: { id: versionId },
-    });
-
-    // Если удалена текущая активная версия, переназначаем currentVersionId на предыдущую
+    // 1. Если удаляется текущая активная версия, СНАЧАЛА переназначаем currentVersionId
+    // во избежание ошибки внешнего ключа ON DELETE RESTRICT
     if (digitalFile.currentVersionId === versionId) {
       const remaining = digitalFile.versions.filter((v) => v.id !== versionId);
       const newCurrent = remaining[0] || null;
@@ -995,6 +1031,18 @@ export class StorageAdminController {
           currentVersionId: newCurrent ? newCurrent.id : null,
           isActive: remaining.length > 0,
         },
+      });
+    }
+
+    // 2. Проверяем наличие логов скачиваний перед удалением
+    const downloadLogsCount = await this.prisma.downloadLog.count({
+      where: { fileVersionId: versionId },
+    });
+
+    if (downloadLogsCount === 0) {
+      // Безопасно удаляем версию из БД
+      await this.prisma.fileVersion.delete({
+        where: { id: versionId },
       });
     }
 

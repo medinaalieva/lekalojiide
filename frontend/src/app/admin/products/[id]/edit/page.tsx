@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useState, use } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { api } from "../../../../../lib/api";
 import { Category, DifficultyLevel } from "../../../../../types";
 import { Button } from "../../../../../components/ui/Button";
@@ -31,10 +31,10 @@ import {
 export default function AdminEditProductPage({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  params?: { id: string };
 }) {
-  const unwrappedParams = typeof (params as any).then === "function" ? use(params as Promise<{ id: string }>) : (params as { id: string });
-  const productId = unwrappedParams.id;
+  const routeParams = useParams();
+  const productId = (routeParams?.id as string) || (params as any)?.id || "";
   const router = useRouter();
 
   // Loading state
@@ -974,7 +974,7 @@ export default function AdminEditProductPage({
                     Главная фотография изделия (Обложка)
                   </label>
                   <Link
-                    href={`/admin/products/${productId}/files`}
+                    href={`/admin/products/${productId}/files?tab=images`}
                     className="text-xs text-brand-700 hover:text-brand-900 font-medium"
                   >
                     Перейти в галерею фото →
