@@ -7,6 +7,7 @@ import fastifyCookie from "@fastify/cookie";
 import { Module } from "@nestjs/common";
 import { AuthHttpController } from "../src/modules/auth/auth-http.controller";
 import { AuthService } from "../src/modules/auth/auth.service";
+import { PasswordResetService } from "../src/modules/auth/password-reset.service";
 import { PrismaService } from "../src/lib/prisma.service";
 import { AppExceptionFilter } from "../src/common/filters/app-exception.filter";
 import { REFRESH_TOKEN_COOKIE_NAME } from "../src/utils/cookies";
@@ -132,6 +133,10 @@ async function createTestApp() {
       {
         provide: AuthService,
         useFactory: () => new AuthService(mockPrisma as any),
+      },
+      {
+        provide: PasswordResetService,
+        useFactory: () => new PasswordResetService(mockPrisma as any, new AuthService(mockPrisma as any)),
       },
     ],
   })

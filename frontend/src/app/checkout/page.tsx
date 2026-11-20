@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useCart } from "../../lib/cart-context";
 import { useAuth } from "../../lib/auth-context";
-import { api, ApiError } from "../../lib/api";
+import { api } from "../../lib/api";
 import { Button } from "../../components/ui/Button";
 import {
   ShieldCheck,
@@ -15,6 +15,11 @@ import {
   ArrowRight,
   ExternalLink,
   Scissors,
+  Check,
+  XCircle,
+  RotateCcw,
+  Sparkles,
+  Layers,
 } from "lucide-react";
 
 export default function CheckoutPage() {
@@ -22,9 +27,12 @@ export default function CheckoutPage() {
   const { user } = useAuth();
   const { cart, itemsCount, totalAmountKgs, refreshCart } = useCart();
 
-  const [contactEmail, setContactEmail] = useState("");
-  const [contactPhone, setContactPhone] = useState("");
+  // Contact fields (BUG-01 fix: aligned with backend CheckoutDtoSchema)
+  const [customerName, setCustomerName] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [customerNote, setCustomerNote] = useState("");
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,27 +40,43 @@ export default function CheckoutPage() {
   const [createdOrder, setCreatedOrder] = useState<any | null>(null);
   const [paymentInfo, setPaymentInfo] = useState<any | null>(null);
 
+  // In-place Payment Sandbox Simulation
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simulationStatus, setSimulationStatus] = useState<"SUCCEEDED" | "FAILED" | "CANCELED" | null>(null);
+
   useEffect(() => {
     if (user) {
-      if (user.email && !contactEmail) setContactEmail(user.email);
-      if (user.phone && !contactPhone) setContactPhone(user.phone);
+      if (!customerName) {
+        const full = [user.firstName, user.lastName].filter(Boolean).join(" ");
+        if (full) setCustomerName(full);
+      }
+      if (user.email && !customerEmail) setCustomerEmail(user.email);
+      if (user.phone && !customerPhone) setCustomerPhone(user.phone);
     }
-  }, [user, contactEmail, contactPhone]);
+  }, [user, customerName, customerEmail, customerPhone]);
 
+  // Guest wall: guide to login with safe redirect
   if (!user) {
     return (
-      <div className="bg-atelier-surface min-h-[70vh] flex items-center justify-center py-16">
-        <div className="max-w-md w-full mx-auto px-4 text-center bg-white p-8 border border-atelier-border rounded-sm">
-          <CreditCard className="w-12 h-12 text-atelier-muted mx-auto mb-4" />
+      <div className="bg-atelier-surface min-h-[70vh] flex items-center justify-center py-16 px-4 sm:px-6">
+        <div className="max-w-md w-full mx-auto text-center bg-white p-8 sm:p-10 border border-atelier-border rounded-sm shadow-sm">
+          <CreditCard className="w-12 h-12 text-atelier-muted mx-auto mb-4 stroke-[1.2]" />
           <h2 className="font-serif text-2xl font-bold text-brand-950">
             Оформление заказа
           </h2>
-          <p className="text-xs text-atelier-muted mt-2">
-            Для завершения покупки и привязки выкроек к вашему профилю войдите в аккаунт.
+          <p className="text-xs text-atelier-muted mt-2 leading-relaxed">
+            Для оформления заказа, безопасной оплаты и сохранения цифровых выкроек в вашем личном кабинете войдите в аккаунт.
           </p>
-          <Link href="/login" className="inline-block mt-6">
-            <Button>Войти в аккаунт</Button>
-          </Link>
+          <div className="mt-6 flex flex-col space-y-3">
+            <Link href="/login?redirect=/checkout">
+              <Button className="w-full">Войти в аккаунт</Button>
+            </Link>
+            <Link href="/register?redirect=/checkout">
+              <Button variant="outline" className="w-full">
+                Зарегистрироваться
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -62,16 +86,16 @@ export default function CheckoutPage() {
 
   if (items.length === 0 && !createdOrder) {
     return (
-      <div className="bg-atelier-surface min-h-[70vh] flex items-center justify-center py-16">
-        <div className="max-w-md w-full mx-auto px-4 text-center bg-white p-8 border border-atelier-border rounded-sm">
+      <div className="bg-atelier-surface min-h-[70vh] flex items-center justify-center py-16 px-4 sm:px-6">
+        <div className="max-w-md w-full mx-auto text-center bg-white p-8 sm:p-10 border border-atelier-border rounded-sm shadow-sm">
           <h2 className="font-serif text-2xl font-bold text-brand-950">
             В корзине нет товаров
           </h2>
-          <p className="text-xs text-atelier-muted mt-2">
-            Добавьте выкройку в каталоге перед оформлением.
+          <p className="text-xs text-atelier-muted mt-2 leading-relaxed">
+            Добавьте понравившуюся выкройку в каталоге перед оформлением.
           </p>
           <Link href="/catalog" className="inline-block mt-6">
-            <Button>В каталог</Button>
+            <Button>В каталог выкроек</Button>
           </Link>
         </div>
       </div>
@@ -81,39 +105,58 @@ export default function CheckoutPage() {
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    // Client-side validations
+    const trimmedName = customerName.trim();
+    if (!trimmedName || trimmedName.length < 2) {
+      setError("Пожалуйста, укажите имя и фамилию (минимум 2 символа).");
+      return;
+    }
+
+    const trimmedEmail = customerEmail.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setError("Пожалуйста, укажите корректный адрес электронной почты.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
+      // BUG-01 Fix: align field names with CheckoutDtoSchema
       const payload: {
-        contactEmail?: string;
-        contactPhone?: string;
-        customerNote?: string;
-      } = {};
-
-      if (contactEmail.trim()) payload.contactEmail = contactEmail.trim();
-      if (contactPhone.trim()) payload.contactPhone = contactPhone.trim();
-      if (customerNote.trim()) payload.customerNote = customerNote.trim();
+        customerName: string;
+        customerEmail: string;
+        customerPhone?: string | null;
+      } = {
+        customerName: trimmedName,
+        customerEmail: trimmedEmail,
+        customerPhone: customerPhone.trim() || null,
+      };
 
       const res = await api.post<{
         success: boolean;
-        data: {
-          order: any;
-          payment?: any;
-        };
+        data: any;
       }>("/api/v1/orders/checkout", payload);
 
       if (res.success && res.data) {
-        const orderData = (res.data as any).order || res.data;
+        const orderData = res.data.order || res.data;
         setCreatedOrder(orderData);
         await refreshCart();
 
-        // Auto-initiate payment to get active paymentUrl
+        // Auto-initiate payment to get active payment details
         const orderId = orderData.orderId || orderData.id;
         if (orderId) {
           try {
             const payRes = await api.post<{
               success: boolean;
-              data: { paymentUrl: string; externalId?: string };
+              data: {
+                paymentId: string;
+                paymentUrl: string;
+                idempotencyKey: string;
+                amount: number;
+                currency: string;
+              };
             }>(`/api/v1/orders/${orderId}/payment`, {});
             if (payRes.success && payRes.data) {
               setPaymentInfo(payRes.data);
@@ -130,67 +173,213 @@ export default function CheckoutPage() {
     }
   };
 
-  // If order successfully created, show confirmation & payment step
+  // Payment simulation handler (BUG-03 fix)
+  const handleSimulatePayment = async (status: "SUCCEEDED" | "FAILED" | "CANCELED") => {
+    const orderId = createdOrder?.orderId || createdOrder?.id;
+    if (!orderId) return;
+
+    setIsSimulating(true);
+    setError(null);
+
+    try {
+      const res = await api.post<{
+        success: boolean;
+        data: any;
+      }>(`/api/v1/orders/${orderId}/mock-simulate`, { status });
+
+      if (res.success) {
+        setSimulationStatus(status);
+
+        // Fetch verified order payment status from backend
+        const statusRes = await api.get<{
+          success: boolean;
+          data: {
+            orderStatus: string;
+            isPaid: boolean;
+          };
+        }>(`/api/v1/orders/${orderId}/payment-status`);
+
+        if (statusRes.success && statusRes.data) {
+          setCreatedOrder((prev: any) => ({
+            ...prev,
+            status: statusRes.data.orderStatus,
+            isPaid: statusRes.data.isPaid,
+          }));
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || "Ошибка при обработке тестового платежа");
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
+  // Order created confirmation view with local Test Payment Sandbox
   if (createdOrder) {
+    const isPaid = createdOrder.status === "PAID" || simulationStatus === "SUCCEEDED";
+    const isFailed = simulationStatus === "FAILED";
+    const isCanceled = simulationStatus === "CANCELED";
+    const orderId = createdOrder.orderId || createdOrder.id;
+    const idempotencyKey = paymentInfo?.idempotencyKey || orderId;
+
     return (
-      <div className="bg-atelier-surface min-h-screen py-16">
-        <div className="max-w-2xl mx-auto px-4">
-          <div className="bg-white p-8 border border-atelier-border rounded-sm shadow-sm text-center">
-            <CheckCircle className="w-16 h-16 text-emerald-600 mx-auto mb-4" />
-            <span className="text-xs font-semibold uppercase tracking-widest text-brand-700">
-              Заказ успешно оформлен
-            </span>
-            <h1 className="font-serif text-3xl font-bold text-brand-950 mt-1">
-              Заказ № {createdOrder.orderNumber}
-            </h1>
-            <p className="text-xs text-atelier-muted mt-2">
-              Сумма к оплате:{" "}
-              <strong className="text-brand-950 text-base">
-                {(
-                  createdOrder.totalAmount ??
-                  createdOrder.totalKgs ??
-                  0
-                ).toLocaleString("ru-RU")}{" "}
-                KGS
-              </strong>
-            </p>
-
-            <div className="mt-8 p-6 bg-brand-50/60 border border-brand-200/60 rounded-sm text-left space-y-4">
-              <div className="flex items-center space-x-2 text-xs font-semibold uppercase tracking-wider text-brand-950">
-                <CreditCard className="w-4 h-4 text-brand-800" />
-                <span>Тестовая оплата онлайн (KGS Sandbox)</span>
+      <div className="bg-atelier-surface min-h-screen py-12 px-4 sm:px-6">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-white p-6 sm:p-10 border border-atelier-border rounded-sm shadow-sm text-center space-y-6">
+            {isPaid ? (
+              <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                <Check className="w-10 h-10" />
               </div>
-              <p className="text-xs text-atelier-charcoal leading-relaxed">
-                Для перехода в тестовый платёжный шлюз нажмите кнопку ниже. После подтверждения транзакции файлы выкроек мгновенно появятся в разделе «Мои выкройки».
-              </p>
+            ) : (
+              <CheckCircle className="w-16 h-16 text-brand-800 mx-auto" />
+            )}
 
-              {paymentInfo?.paymentUrl ? (
-                <a
-                  href={paymentInfo.paymentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block"
-                >
-                  <Button size="lg" className="w-full text-base">
-                    <span>
-                      Оплатить заказ{" "}
-                      {createdOrder.totalAmount ?? createdOrder.totalKgs ?? ""}{" "}
-                      сом
-                    </span>
-                    <ExternalLink className="w-4 h-4 ml-2" />
-                  </Button>
-                </a>
-              ) : (
-                <Link href={`/cabinet`} className="block">
-                  <Button size="lg" className="w-full text-base">
-                    <span>Перейти в личный кабинет</span>
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </Button>
-                </Link>
-              )}
+            <div>
+              <span className="text-xs font-semibold uppercase tracking-widest text-brand-700">
+                {isPaid ? "Оплата успешно подтверждена" : "Заказ ожидает оплаты"}
+              </span>
+              <h1 className="font-serif text-3xl font-bold text-brand-950 mt-1">
+                Заказ № {createdOrder.orderNumber}
+              </h1>
+              <p className="text-xs text-atelier-muted mt-2">
+                Сумма к оплате:{" "}
+                <strong className="text-brand-950 text-base font-bold">
+                  {(
+                    createdOrder.totalAmount ??
+                    createdOrder.totalKgs ??
+                    0
+                  ).toLocaleString("ru-RU")}{" "}
+                  KGS
+                </strong>
+              </p>
+              <p className="text-[11px] text-atelier-muted mt-0.5">
+                Получатель: {createdOrder.customerName || customerName} ({createdOrder.customerEmail || customerEmail})
+              </p>
             </div>
 
-            <div className="mt-6 flex flex-wrap justify-center gap-4 text-xs">
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-sm text-xs text-red-800 text-left flex items-start space-x-2">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Status alerts */}
+            {isPaid && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-sm text-left text-xs text-emerald-950 space-y-1">
+                <div className="font-bold flex items-center space-x-1.5 text-emerald-800">
+                  <Check className="w-4 h-4" />
+                  <span>Цифровые права активированы!</span>
+                </div>
+                <p className="text-emerald-900/90 leading-relaxed">
+                  Платёж подтверждён сервером. Все выкройки, ростовки и инструкции уже доступны для скачивания в вашем личном кабинете.
+                </p>
+              </div>
+            )}
+
+            {isFailed && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-sm text-left text-xs text-red-950 space-y-1">
+                <div className="font-bold flex items-center space-x-1.5 text-red-800">
+                  <XCircle className="w-4 h-4" />
+                  <span>Платёж отклонён банком</span>
+                </div>
+                <p className="text-red-900/90 leading-relaxed">
+                  Тестовый шлюз вернул статус FAILED. Вы можете повторить попытку оплаты.
+                </p>
+              </div>
+            )}
+
+            {isCanceled && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-sm text-left text-xs text-amber-950 space-y-1">
+                <div className="font-bold flex items-center space-x-1.5 text-amber-800">
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Платёж отменён пользователем</span>
+                </div>
+                <p className="text-amber-900/90 leading-relaxed">
+                  Попытка оплаты была отменена. Заказ остаётся в ожидании оплаты.
+                </p>
+              </div>
+            )}
+
+            {/* Test Payment Sandbox Panel */}
+            <div className="p-6 bg-brand-50/60 border border-brand-200/60 rounded-sm text-left space-y-4">
+              <div className="flex items-center justify-between border-b border-brand-200/60 pb-3">
+                <div className="flex items-center space-x-2 text-xs font-semibold uppercase tracking-wider text-brand-950">
+                  <CreditCard className="w-4 h-4 text-brand-800" />
+                  <span>Тестовый платежный шлюз (KGS Sandbox)</span>
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-sm">
+                  Активен
+                </span>
+              </div>
+
+              <p className="text-xs text-atelier-charcoal leading-relaxed">
+                В тестовом окружении выберите сценарий для проверки сквозной обработки платежа через защищенный вебхук:
+              </p>
+
+              {/* Scenario buttons */}
+              {!isPaid ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  <Button
+                    size="md"
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-medium text-xs justify-center"
+                    isLoading={isSimulating}
+                    disabled={isSimulating}
+                    onClick={() => handleSimulatePayment("SUCCEEDED")}
+                  >
+                    <span>✅ Оплатить (Успех)</span>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="md"
+                    className="border-red-300 text-red-700 hover:bg-red-50 font-medium text-xs justify-center"
+                    isLoading={isSimulating}
+                    disabled={isSimulating}
+                    onClick={() => handleSimulatePayment("FAILED")}
+                  >
+                    <span>❌ Отказ банка</span>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="md"
+                    className="border-atelier-border text-atelier-charcoal hover:bg-atelier-subtle font-medium text-xs justify-center"
+                    isLoading={isSimulating}
+                    disabled={isSimulating}
+                    onClick={() => handleSimulatePayment("CANCELED")}
+                  >
+                    <span>↩️ Отмена</span>
+                  </Button>
+                </div>
+              ) : (
+                <div className="pt-2">
+                  <Link href="/cabinet/library" className="block">
+                    <Button size="lg" className="w-full text-base bg-emerald-700 hover:bg-emerald-800">
+                      <span>Перейти в Мои выкройки (Скачать PDF)</span>
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </Button>
+                  </Link>
+                </div>
+              )}
+
+              {/* Link to dedicated mock payment page */}
+              <div className="pt-3 border-t border-brand-200/50 flex flex-col sm:flex-row items-center justify-between text-xs text-atelier-muted gap-2">
+                <span>Отдельная страница эмулятора:</span>
+                <Link
+                  href={`/payment/mock/${idempotencyKey}?orderId=${orderId}&order=${encodeURIComponent(
+                    createdOrder.orderNumber
+                  )}&amount=${createdOrder.totalAmount ?? 0}&currency=KGS`}
+                  className="text-brand-800 hover:text-brand-950 font-medium inline-flex items-center space-x-1 underline"
+                >
+                  <span>Открыть шлюз в отдельном окне</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
+
+            {/* Navigation links */}
+            <div className="pt-2 flex flex-wrap justify-center gap-6 text-xs">
               <Link
                 href="/cabinet/library"
                 className="text-brand-800 hover:text-brand-950 font-medium underline"
@@ -211,8 +400,8 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="bg-atelier-surface min-h-screen py-10">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="bg-atelier-surface min-h-screen py-10 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
         <div className="border-b border-atelier-border pb-4 mb-8">
           <span className="text-xs uppercase tracking-widest text-brand-700 font-semibold">
             Оформление покупки
@@ -226,7 +415,7 @@ export default function CheckoutPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             {/* Form Fields - 7 cols */}
             <div className="lg:col-span-7 space-y-6">
-              <div className="bg-white p-6 border border-atelier-border rounded-sm space-y-4">
+              <div className="bg-white p-6 sm:p-8 border border-atelier-border rounded-sm shadow-2xs space-y-4">
                 <h2 className="font-serif text-base font-bold text-brand-950 border-b border-atelier-border pb-3">
                   1. Данные для отправки чека и доступа к выкройкам
                 </h2>
@@ -238,34 +427,64 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
+                {/* BUG-01 Fix: customerName input */}
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-atelier-charcoal mb-1">
+                  <label htmlFor="customerName" className="block text-xs font-semibold uppercase tracking-wider text-atelier-charcoal mb-1">
+                    Имя и фамилия покупателя *
+                  </label>
+                  <input
+                    type="text"
+                    id="customerName"
+                    name="customerName"
+                    required
+                    minLength={2}
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Айпери Бектемирова"
+                    className="w-full px-3 py-2 text-sm border border-atelier-border rounded-sm focus:outline-none focus:border-brand-500"
+                  />
+                  <span className="text-[11px] text-atelier-muted mt-1 block">
+                    Указывается в чеке и сопроводительных документах
+                  </span>
+                </div>
+
+                {/* BUG-01 Fix: customerEmail input */}
+                <div>
+                  <label htmlFor="customerEmail" className="block text-xs font-semibold uppercase tracking-wider text-atelier-charcoal mb-1">
                     Email для получения доступа *
                   </label>
                   <input
                     type="email"
+                    id="customerEmail"
+                    name="customerEmail"
                     required
-                    value={contactEmail}
-                    onChange={(e) => setContactEmail(e.target.value)}
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
                     placeholder="example@mail.kg"
                     className="w-full px-3 py-2 text-sm border border-atelier-border rounded-sm focus:outline-none focus:border-brand-500"
                   />
                   <span className="text-[11px] text-atelier-muted mt-1 block">
-                    На этот адрес будет выслан чек и уведомление об обновлении версий выкроек
+                    На этот адрес будет выслан электронный чек и уведомление об обновлении выкроек
                   </span>
                 </div>
 
+                {/* BUG-01 Fix: customerPhone input */}
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-atelier-charcoal mb-1">
+                  <label htmlFor="customerPhone" className="block text-xs font-semibold uppercase tracking-wider text-atelier-charcoal mb-1">
                     Номер телефона (WhatsApp / Telegram)
                   </label>
                   <input
                     type="tel"
-                    value={contactPhone}
-                    onChange={(e) => setContactPhone(e.target.value)}
+                    id="customerPhone"
+                    name="customerPhone"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
                     placeholder="+996 555 123456"
                     className="w-full px-3 py-2 text-sm border border-atelier-border rounded-sm focus:outline-none focus:border-brand-500"
                   />
+                  <span className="text-[11px] text-atelier-muted mt-1 block">
+                    Для оперативной связи в мессенджерах при возникновении вопросов
+                  </span>
                 </div>
 
                 <div>
@@ -276,20 +495,20 @@ export default function CheckoutPage() {
                     rows={2}
                     value={customerNote}
                     onChange={(e) => setCustomerNote(e.target.value)}
-                    placeholder="Дополнительные пожелания..."
+                    placeholder="Дополнительные пожелания к заказу..."
                     className="w-full px-3 py-2 text-sm border border-atelier-border rounded-sm focus:outline-none focus:border-brand-500"
                   />
                 </div>
               </div>
 
               {/* Payment Method Details */}
-              <div className="bg-white p-6 border border-atelier-border rounded-sm space-y-3">
+              <div className="bg-white p-6 sm:p-8 border border-atelier-border rounded-sm shadow-2xs space-y-3">
                 <div className="flex items-center justify-between border-b border-atelier-border pb-3">
                   <h2 className="font-serif text-base font-bold text-brand-950">
                     2. Способ оплаты
                   </h2>
                   <span className="text-[11px] text-atelier-muted">
-                    Валюта расчетов: KGS (сом)
+                    Валюта: KGS (сом)
                   </span>
                 </div>
 
@@ -376,16 +595,30 @@ export default function CheckoutPage() {
                     const heightStr = typeof item.height === "object" ? item.height?.label : item.height || item.variant?.height;
                     const formatStr = typeof item.format === "object" ? item.format?.label : item.format || item.variant?.format;
                     const price = item.price ?? item.variant?.priceKgs ?? item.variant?.price ?? 0;
+                    const isBundle = Boolean(
+                      item.isBundle ||
+                      sizeStr === "ALL" ||
+                      (typeof sizeStr === "string" && sizeStr.toLowerCase().includes("все размеры"))
+                    );
 
                     return (
                       <div key={item.id} className="pt-2 flex justify-between text-xs">
-                        <div>
-                          <p className="font-medium text-atelier-charcoal">{title}</p>
-                          <p className="text-[11px] text-atelier-muted">
-                            {sizeStr ? `${sizeStr} RU · ` : ""}{heightStr ? `${heightStr} см · ` : ""}{formatStr}
-                          </p>
+                        <div className="pr-2">
+                          <p className="font-medium text-atelier-charcoal line-clamp-1">{title}</p>
+                          <div className="mt-0.5 flex flex-wrap gap-1 text-[11px] text-atelier-muted">
+                            {isBundle ? (
+                              <span className="text-amber-800 font-semibold inline-flex items-center space-x-1">
+                                <Layers className="w-3 h-3 text-amber-700 inline" />
+                                <span>Комплект ALL</span>
+                              </span>
+                            ) : (
+                              sizeStr && <span>{sizeStr} RU</span>
+                            )}
+                            {heightStr && <span>· {heightStr}</span>}
+                            {formatStr && <span>· {formatStr}</span>}
+                          </div>
                         </div>
-                        <span className="font-semibold text-brand-950 shrink-0 ml-2">
+                        <span className="font-semibold text-brand-950 shrink-0">
                           {price.toLocaleString("ru-RU")} KGS
                         </span>
                       </div>
@@ -400,7 +633,7 @@ export default function CheckoutPage() {
                   </div>
                   <div className="flex justify-between text-atelier-muted">
                     <span>Доставка:</span>
-                    <span className="text-emerald-700 font-medium">Бесплатно (PDF)</span>
+                    <span className="text-emerald-700 font-medium">Бесплатно (PDF в ЛК)</span>
                   </div>
                   <div className="flex justify-between items-baseline pt-2 border-t border-atelier-border">
                     <span className="text-sm font-bold text-brand-950">
@@ -419,7 +652,7 @@ export default function CheckoutPage() {
                   isLoading={isSubmitting}
                   disabled={isSubmitting}
                 >
-                  <span>Подтвердить и оплатить</span>
+                  <span>Подтвердить и перейти к оплате</span>
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
 

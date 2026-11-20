@@ -46,13 +46,14 @@ export function DifficultyBadge({ difficulty }: { difficulty?: DifficultyLevel |
 
   const map: Record<
     string,
-    { label: string; variant: "default" | "secondary" | "success" | "warning" }
+    { label: string; variant: "default" | "secondary" | "success" | "warning" | "danger" }
   > = {
     BEGINNER: { label: "Для начинающих", variant: "success" },
-    EASY: { label: "Простой", variant: "default" },
-    MEDIUM: { label: "Средний", variant: "warning" },
+    EASY: { label: "Простой уровень", variant: "success" },
+    MEDIUM: { label: "Средний уровень", variant: "warning" },
+    INTERMEDIATE: { label: "Средняя сложность", variant: "warning" },
     ADVANCED: { label: "Продвинутый", variant: "secondary" },
-    EXPERT: { label: "Сложный", variant: "secondary" },
+    EXPERT: { label: "Для опытных", variant: "danger" },
   };
 
   const item = map[difficulty] || { label: difficulty, variant: "secondary" };

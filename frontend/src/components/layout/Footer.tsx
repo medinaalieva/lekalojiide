@@ -80,18 +80,28 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/catalog?category=platya" className="hover:text-white transition-colors">
+                <Link href="/catalog?categorySlug=platya" className="hover:text-white transition-colors">
                   Платья и сарафаны
                 </Link>
               </li>
               <li>
-                <Link href="/catalog?category=verhnyaya-odezhda" className="hover:text-white transition-colors">
-                  Пальто и тренчи
+                <Link href="/catalog?categorySlug=yubki" className="hover:text-white transition-colors">
+                  Юбки
                 </Link>
               </li>
               <li>
-                <Link href="/catalog?category=kostyumy" className="hover:text-white transition-colors">
-                  Костюмы и жакеты
+                <Link href="/catalog?categorySlug=bryuki-shorty" className="hover:text-white transition-colors">
+                  Брюки и шорты
+                </Link>
+              </li>
+              <li>
+                <Link href="/catalog?categorySlug=bluzy" className="hover:text-white transition-colors">
+                  Блузки и топы
+                </Link>
+              </li>
+              <li>
+                <Link href="/catalog?categorySlug=zhakety-verkhnyaya-odezhda" className="hover:text-white transition-colors">
+                  Жакеты и пальто
                 </Link>
               </li>
             </ul>

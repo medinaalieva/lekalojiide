@@ -5,6 +5,9 @@ import {
   GeneratePresignedUrlParams,
   PresignedUrlResult,
   VerifyPresignedUrlResult,
+  UploadFileParams,
+  UploadFileResult,
+  DeleteFileParams,
 } from "./storage.interface";
 import { BadRequestError } from "../../utils/errors";
 
@@ -12,6 +15,8 @@ import { BadRequestError } from "../../utils/errors";
 export class MockStorageService implements IStorageService {
   private readonly signingSecret: string;
   private readonly baseUrl: string = "https://storage.lekalozhiide.local/mock-s3/download";
+  private readonly publicBaseUrl: string = "https://storage.lekalozhiide.local/mock-s3/public";
+  private readonly mockFiles: Map<string, { sizeBytes: number; contentType: string; sha256Hash: string }> = new Map();
 
   constructor() {
     this.signingSecret =
@@ -93,5 +98,48 @@ export class MockStorageService implements IStorageService {
     } catch {
       return { valid: false, reason: "MALFORMED_URL" };
     }
+  }
+
+  /**
+   * Загрузка файла в Mock Storage
+   */
+  async uploadFile(params: UploadFileParams): Promise<UploadFileResult> {
+    const fileSizeBytes = params.body.length;
+    const sha256Hash = crypto.createHash("sha256").update(params.body).digest("hex");
+    const mapKey = `${params.bucket}/${params.key}`;
+
+    this.mockFiles.set(mapKey, {
+      sizeBytes: fileSizeBytes,
+      contentType: params.contentType,
+      sha256Hash,
+    });
+
+    const publicUrl = params.isPublic
+      ? this.getPublicUrl(params.bucket, params.key)
+      : undefined;
+
+    return {
+      bucket: params.bucket,
+      key: params.key,
+      publicUrl,
+      fileSizeBytes,
+      contentType: params.contentType,
+      sha256Hash,
+    };
+  }
+
+  /**
+   * Удаление файла из Mock Storage
+   */
+  async deleteFile(params: DeleteFileParams): Promise<void> {
+    const mapKey = `${params.bucket}/${params.key}`;
+    this.mockFiles.delete(mapKey);
+  }
+
+  /**
+   * Получение прямого публичного URL для Mock Storage
+   */
+  getPublicUrl(bucket: string, key: string): string {
+    return `${this.publicBaseUrl}/${bucket}/${key}`;
   }
 }

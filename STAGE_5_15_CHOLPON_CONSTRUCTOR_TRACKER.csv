@@ -1,0 +1,12 @@
+deliverable,filename,size,format,status,received_date,technical_check,constructor_check,notes
+PDF-1,palto-oversayz-cholpon-42-164-170-A4.pdf,42,A4,NOT_ORDERED,,PENDING,PENDING,Ожидает отправки ТЗ конструктору
+PDF-2,palto-oversayz-cholpon-42-164-170-PLOTTER_900.pdf,42,PLOTTER_900,NOT_ORDERED,,PENDING,PENDING,Ожидает отправки ТЗ конструктору
+PDF-3,palto-oversayz-cholpon-44-164-170-A4.pdf,44,A4,NOT_ORDERED,,PENDING,PENDING,Ожидает отправки ТЗ конструктору
+PDF-4,palto-oversayz-cholpon-44-164-170-PLOTTER_900.pdf,44,PLOTTER_900,NOT_ORDERED,,PENDING,PENDING,Ожидает отправки ТЗ конструктору
+PDF-5,palto-oversayz-cholpon-46-164-170-A4.pdf,46,A4,NOT_ORDERED,,PENDING,PENDING,Ожидает отправки ТЗ конструктору
+PDF-6,palto-oversayz-cholpon-46-164-170-PLOTTER_900.pdf,46,PLOTTER_900,NOT_ORDERED,,PENDING,PENDING,Ожидает отправки ТЗ конструктору
+DOC-1,palto-oversayz-cholpon-measurements-table.pdf,42-46,DOC,NOT_ORDERED,,PENDING,PENDING,Таблица готовых промеров изделия для 42 44 46
+DOC-2,palto-oversayz-cholpon-pieces-spec.pdf,42-46,DOC,NOT_ORDERED,,PENDING,PENDING,Спецификация 12 деталей кроя (основная подкладка дублерин)
+DOC-3,palto-oversayz-cholpon-fabric-consumption.pdf,42-46,DOC,NOT_ORDERED,,PENDING,PENDING,Расчет расхода ткани для ширины 140 см и 150 см
+DOC-4,palto-oversayz-cholpon-sewing-guide.pdf,42-46,PDF,NOT_ORDERED,,PENDING,PENDING,Пошаговая инструкция по сборке пальто
+DOC-5,palto-oversayz-cholpon-test-square-100x100.pdf,42-46,PDF,NOT_ORDERED,,PENDING,PENDING,Контрольный лист с проверочным квадратом 100х100 мм

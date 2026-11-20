@@ -1,4 +1,5 @@
 import { AuthService } from "./auth.service";
+import { PasswordResetService } from "./password-reset.service";
 import { extractAuthUser, checkRolePermissions } from "./auth.guard";
 import { getRefreshTokenCookieOptions, getClearCookieOptions, REFRESH_TOKEN_COOKIE_NAME } from "../../utils/cookies";
 import { AppError, ForbiddenError } from "../../utils/errors";
@@ -20,7 +21,71 @@ export interface HttpResponse {
 }
 
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  private passwordResetService: PasswordResetService;
+
+  constructor(
+    private authService: AuthService,
+    passwordResetService?: PasswordResetService
+  ) {
+    this.passwordResetService =
+      passwordResetService || new PasswordResetService(undefined, this.authService);
+  }
+
+  /**
+   * POST /api/v1/auth/forgot-password
+   */
+  async forgotPassword(req: HttpRequest): Promise<HttpResponse> {
+    try {
+      const origin = req.headers["origin"] || req.headers["referer"];
+      if (origin && !isAllowedOrigin(origin)) {
+        throw new ForbiddenError("CSRF_VIOLATION", "Запрос отклонен политикой CORS/CSRF");
+      }
+
+      const result = await this.passwordResetService.requestReset(
+        req.body,
+        req.ip || req.headers["x-forwarded-for"]
+      );
+
+      return {
+        status: 200,
+        body: {
+          success: true,
+          data: result,
+          meta: { timestamp: new Date().toISOString() },
+        },
+      };
+    } catch (err) {
+      return this.handleError(err);
+    }
+  }
+
+  /**
+   * POST /api/v1/auth/reset-password
+   */
+  async resetPassword(req: HttpRequest): Promise<HttpResponse> {
+    try {
+      const origin = req.headers["origin"] || req.headers["referer"];
+      if (origin && !isAllowedOrigin(origin)) {
+        throw new ForbiddenError("CSRF_VIOLATION", "Запрос отклонен политикой CORS/CSRF");
+      }
+
+      const result = await this.passwordResetService.resetPassword(
+        req.body,
+        req.ip || req.headers["x-forwarded-for"]
+      );
+
+      return {
+        status: 200,
+        body: {
+          success: true,
+          data: result,
+          meta: { timestamp: new Date().toISOString() },
+        },
+      };
+    } catch (err) {
+      return this.handleError(err);
+    }
+  }
 
   /**
    * POST /api/v1/auth/register
@@ -137,8 +202,16 @@ export class AuthController {
         throw new ForbiddenError("CSRF_VIOLATION", "Запрос отклонен политикой CORS/CSRF");
       }
 
-      const user = extractAuthUser(req.headers["authorization"]);
-      await this.authService.logout(user.sessionId);
+      try {
+        if (req.headers["authorization"]) {
+          const user = extractAuthUser(req.headers["authorization"]);
+          if (user?.sessionId) {
+            await this.authService.logout(user.sessionId);
+          }
+        }
+      } catch {
+        // Even if token expired or missing, proceed to clear cookies
+      }
 
       return {
         status: 200,

@@ -299,7 +299,7 @@ export default function CabinetLibraryPage() {
                     </Button>
 
                     {/* Sewing instructions */}
-                    {instructionId && (
+                    {instructionId ? (
                       <div className="pt-2">
                         <span className="text-[10px] uppercase tracking-wider text-atelier-muted block mb-1 font-semibold">
                           Инструкции по пошиву:
@@ -318,6 +318,13 @@ export default function CabinetLibraryPage() {
                           </div>
                           <Download className="w-3.5 h-3.5 text-atelier-muted shrink-0 ml-2" />
                         </button>
+                      </div>
+                    ) : (
+                      <div className="pt-2 border-t border-atelier-border/40 mt-1">
+                        <div className="flex items-center space-x-1.5 text-[11px] text-atelier-muted py-1">
+                          <FileText className="w-3.5 h-3.5 text-atelier-muted shrink-0 opacity-70" />
+                          <span>Инструкция по пошиву готовится</span>
+                        </div>
                       </div>
                     )}
                   </div>

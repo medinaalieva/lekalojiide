@@ -17,6 +17,29 @@ export interface VerifyPresignedUrlResult {
   fileName?: string;
 }
 
+export interface UploadFileParams {
+  bucket: string;
+  key: string;
+  body: Buffer;
+  contentType: string;
+  fileName?: string;
+  isPublic?: boolean;
+}
+
+export interface UploadFileResult {
+  bucket: string;
+  key: string;
+  publicUrl?: string;
+  fileSizeBytes: number;
+  contentType: string;
+  sha256Hash: string;
+}
+
+export interface DeleteFileParams {
+  bucket: string;
+  key: string;
+}
+
 /**
  * Абстрактный контракт для сервиса хранения и защищенной раздачи файлов
  */
@@ -30,6 +53,21 @@ export interface IStorageService {
    * Верификация срока действия и подлинности временной ссылки (используется для тестов)
    */
   verifyPresignedUrl(url: string): VerifyPresignedUrlResult;
+
+  /**
+   * Загрузка файла в облачное хранилище (буфер)
+   */
+  uploadFile(params: UploadFileParams): Promise<UploadFileResult>;
+
+  /**
+   * Удаление файла из хранилища
+   */
+  deleteFile(params: DeleteFileParams): Promise<void>;
+
+  /**
+   * Получение прямого публичного CDN URL файла (для картинок)
+   */
+  getPublicUrl(bucket: string, key: string): string;
 }
 
 export const STORAGE_SERVICE = "STORAGE_SERVICE";

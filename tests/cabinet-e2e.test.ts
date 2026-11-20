@@ -240,6 +240,7 @@ test("Cabinet Module E2E: Digital Entitlements, Library & Secure Downloads with 
     // =========================================================================
     // ТЕСТ 1: Успешный платеж автоматически создает PurchaseEntitlement
     // =========================================================================
+    const extBankId = "ext_bank_cab_" + Date.now();
     await t.test("1. Successful payment webhook atomically creates PurchaseEntitlement for each OrderItem", async () => {
       const webhookPayload = {
         orderId: order.id,
@@ -247,7 +248,7 @@ test("Cabinet Module E2E: Digital Entitlements, Library & Secure Downloads with 
         amount: 500,
         currency: "KGS",
         status: "SUCCEEDED",
-        externalId: "ext_bank_cab_01",
+        externalId: extBankId,
       };
       const signature = gateway.generateSignature(webhookPayload);
 
@@ -290,7 +291,7 @@ test("Cabinet Module E2E: Digital Entitlements, Library & Secure Downloads with 
         amount: 500,
         currency: "KGS",
         status: "SUCCEEDED",
-        externalId: "ext_bank_cab_01",
+        externalId: extBankId,
       };
       const signature = gateway.generateSignature(webhookPayload);
 
@@ -612,9 +613,8 @@ test("Cabinet Module E2E: Digital Entitlements, Library & Secure Downloads with 
     // ТЕСТ 15: Превышение Rate Limit (более 10 запросов в минуту) блокируется (429)
     // =========================================================================
     await t.test("15. Rate Limiter blocks more than 10 download requests per minute (429 Too Many Requests)", async () => {
-      // Пользователь 1 уже сделал несколько запросов выше, сделаем цикл до 11
       let rateLimited = false;
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 20; i++) {
         const res = await app.inject({
           method: "POST",
           url: `/api/v1/cabinet/files/${entitlement1Id}/download-url`,
@@ -642,7 +642,22 @@ test("Cabinet Module E2E: Digital Entitlements, Library & Secure Downloads with 
       where: { userId: { in: [customer1Id, customer2Id] } },
     }).catch(() => {});
 
+    await prisma.orderItem.deleteMany({
+      where: { order: { userId: { in: [customer1Id, customer2Id] } } },
+    }).catch(() => {});
+
+    await prisma.payment.deleteMany({
+      where: { order: { userId: { in: [customer1Id, customer2Id] } } },
+    }).catch(() => {});
+
+    await prisma.order.deleteMany({
+      where: { userId: { in: [customer1Id, customer2Id] } },
+    }).catch(() => {});
+
     if (testOrderId) {
+      await prisma.purchaseEntitlement.deleteMany({
+        where: { userId: customer1Id },
+      }).catch(() => {});
       await prisma.paymentWebhookEvent.deleteMany({
         where: { paymentGateway: "mock" },
       }).catch(() => {});

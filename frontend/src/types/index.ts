@@ -48,6 +48,9 @@ export interface ProductVariant {
   format: FileFormat | FilterItem;
   price?: number;
   priceKgs?: number;
+  originalPrice?: number;
+  isDiscountActive?: boolean;
+  isBundle?: boolean;
   currency?: string;
   isAvailable?: boolean;
   isActive?: boolean;
@@ -62,11 +65,18 @@ export interface ProductVariant {
 export interface ProductInstruction {
   id: string;
   productId?: string;
+  title?: string;
   fileName: string;
   fileSize?: number;
+  fileSizeBytes?: number;
   mimeType?: string;
   description?: string;
+  version?: number;
+  isActive?: boolean;
+  checksumSha256?: string;
   uploadedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Product {
@@ -80,17 +90,34 @@ export interface Product {
   difficultyLevel?: DifficultyLevel;
   basePrice?: number;
   priceFromKgs?: number;
+  currentPrice?: number;
+  isDiscountActive?: boolean;
+  discountPrice?: number | null;
+  discountPercent?: number | null;
+  discountFrom?: string | null;
+  discountUntil?: string | null;
+  discountStatus?: "PLANNED" | "ACTIVE" | "EXPIRED" | "NONE";
+  bundlePrice?: number | null;
+  hasBundleOption?: boolean;
+  isNew?: boolean;
+  isBestseller?: boolean;
+  isPopular?: boolean;
+  technicalDrawingUrl?: string | null;
+  videoUrl?: string | null;
+  currency?: string;
+  availableSizes?: Array<{ code: string; label: string }>;
   isActive?: boolean;
   coverImage?: string;
-  images?: Array<string | { imageUrl: string; isCover?: boolean }>;
+  images?: Array<string | { id?: string; imageUrl: string; altText?: string; displayOrder?: number; isCover?: boolean }>;
   category?: Category;
   categoryId?: string;
-  fabricDetails?: string | null;
+  fabricDetails?: any;
   fabricRequirements?: string | null;
   measurementsInfo?: string;
   variants?: ProductVariant[];
   instructions?: ProductInstruction[];
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CatalogFilters {
@@ -114,6 +141,9 @@ export interface CartItem {
   format?: FilterItem | string;
   price?: number;
   priceKgs?: number;
+  originalPrice?: number;
+  isDiscountActive?: boolean;
+  isBundle?: boolean;
   currency?: string;
   isAvailable?: boolean;
   createdAt?: string;
@@ -299,4 +329,31 @@ export interface AdminPaymentWebhookEvent {
   errorMessage?: string | null;
   createdAt: string;
   rawPayload?: any;
+}
+
+export interface HeightItem {
+  id: string;
+  code: string;
+  label: string;
+  minHeight?: number | null;
+  maxHeight?: number | null;
+  displayOrder: number;
+  isActive: boolean;
+  variantsCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface FormatItem {
+  id: string;
+  code: string;
+  label: string;
+  description?: string | null;
+  maxPrintWidth?: number | null;
+  displayOrder: number;
+  isActive: boolean;
+  variantsCount?: number;
+  productsCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }

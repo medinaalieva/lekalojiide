@@ -10,13 +10,28 @@ const nextConfig = {
   output: "standalone",
   reactStrictMode: true,
   images: {
-    unoptimized: true,
+    formats: ["image/avif", "image/webp"],
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "**",
+        hostname: "susoqzykfmwivajdkvtb.storage.supabase.co",
+        pathname: "/storage/v1/object/public/**",
+      },
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+        pathname: "/**",
       },
     ],
+  },
+  async redirects() {
+    return [
+      {
+        source: "/catalog/pizharnyj-komplekt-komfort",
+        destination: "/catalog/pizhamnyj-komplekt-komfort",
+        permanent: true,
+      },
+    ];
   },
   async rewrites() {
     return [

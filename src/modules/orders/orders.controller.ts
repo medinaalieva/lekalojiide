@@ -37,6 +37,16 @@ export class OrdersController {
   }
 
   /**
+   * POST /api/v1/orders
+   * Алиас оформления заказа
+   */
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  async createOrderDirect(@Body() body: unknown, @Req() req: FastifyRequest) {
+    return this.checkout(body, req);
+  }
+
+  /**
    * POST /api/v1/orders/checkout
    * Оформление заказа из текущей корзины покупателя
    */
@@ -151,6 +161,33 @@ export class OrdersController {
   ) {
     const user = extractAuthUser(req.headers.authorization);
     const data = await this.paymentsService.getPaymentStatus(user, orderId);
+
+    return {
+      success: true,
+      data,
+      meta: { timestamp: new Date().toISOString() },
+    };
+  }
+
+  /**
+   * POST /api/v1/orders/:id/mock-simulate
+   * Локальная эмуляция ответа эквайринга в тестовом окружении
+   */
+  @Post(":id/mock-simulate")
+  @HttpCode(HttpStatus.OK)
+  async simulatePayment(
+    @Param("id") orderId: string,
+    @Body() body: any,
+    @Req() req: FastifyRequest
+  ) {
+    this.checkOrigin(req);
+    const user = extractAuthUser(req.headers.authorization);
+    const status = (body?.status || "SUCCEEDED").toUpperCase();
+    const data = await this.paymentsService.simulatePaymentResult(
+      user,
+      orderId,
+      status as "SUCCEEDED" | "FAILED" | "CANCELED"
+    );
 
     return {
       success: true,

@@ -264,7 +264,9 @@ test("Catalog E2E: Full Catalog and Administration Flow with PostgreSQL", async 
       assert.ok(varJson.data[0].sku.startsWith("LZ-SILK-E2E"));
       assert.equal(varJson.data[0].price, 450);
       assert.equal(varJson.data[0].currency, "KGS");
-      assert.equal(varJson.data[0].isAvailable, true);
+      // После Stage 5.9 варианты без прикреплённого PDF имеют isAvailable: false
+      assert.equal(varJson.data[0].isAvailable, false);
+      assert.equal(varJson.data[0].unavailableReason, "NO_DIGITAL_FILE");
     });
 
     // -------------------------------------------------------------------------

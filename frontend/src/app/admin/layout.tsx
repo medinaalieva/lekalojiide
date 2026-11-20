@@ -14,6 +14,8 @@ import {
   ArrowLeft,
   ShieldAlert,
   Lock,
+  Ruler,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 
@@ -21,6 +23,8 @@ const ADMIN_NAV_ITEMS = [
   { href: "/admin", label: "Обзор", icon: LayoutDashboard },
   { href: "/admin/products", label: "Выкройки", icon: Package },
   { href: "/admin/categories", label: "Категории", icon: FolderTree },
+  { href: "/admin/sizes", label: "Размеры", icon: Ruler },
+  { href: "/admin/dictionaries", label: "Справочники", icon: SlidersHorizontal },
   { href: "/admin/orders", label: "Заказы", icon: ShoppingCart },
   { href: "/admin/users", label: "Пользователи", icon: Users },
   { href: "/admin/payments", label: "Платежи", icon: CreditCard },
@@ -104,7 +108,7 @@ export default function AdminLayout({
               </span>
               <Link
                 href="/"
-                className="inline-flex items-center space-x-1 text-brand-300 hover:text-white transition-colors uppercase tracking-wider text-[11px]"
+                className="inline-flex items-center min-h-[44px] px-2.5 space-x-1 text-brand-300 hover:text-white transition-colors uppercase tracking-wider text-[11px]"
               >
                 <ArrowLeft className="w-3.5 h-3.5 mr-1" />
                 <span>На витрину</span>
@@ -128,7 +132,7 @@ export default function AdminLayout({
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`inline-flex items-center space-x-2 px-3 py-2 text-xs uppercase tracking-wider rounded-sm transition-colors whitespace-nowrap ${
+                    className={`inline-flex items-center min-h-[44px] sm:min-h-0 space-x-2 px-3 py-2 text-xs uppercase tracking-wider rounded-sm transition-colors whitespace-nowrap ${
                       isActive
                         ? "bg-white text-brand-950 font-semibold shadow-sm"
                         : "text-brand-200 hover:text-white hover:bg-brand-800/60"

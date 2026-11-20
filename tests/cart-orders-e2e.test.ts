@@ -151,6 +151,31 @@ test("Cart & Orders E2E: Full Shopping Cart and Checkout Flow with PostgreSQL", 
     });
     variant1Id = var1.id;
 
+    // Прикрепляем готовые PDF-выкройки к var1 для проверки оформления
+    const df1 = await prisma.digitalFile.create({
+      data: {
+        variantId: var1.id,
+        title: "Выкройка Silk Var1 A4",
+        isActive: true,
+      },
+    });
+    const fv1 = await prisma.fileVersion.create({
+      data: {
+        digitalFileId: df1.id,
+        versionNumber: 1,
+        s3Bucket: "lekalo-patterns",
+        s3Key: `patterns/${var1.id}/silk-var1-a4.pdf`,
+        originalFileName: "silk-var1-a4.pdf",
+        fileSizeBytes: BigInt(2048),
+        mimeType: "application/pdf",
+        checksumSha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      },
+    });
+    await prisma.digitalFile.update({
+      where: { id: df1.id },
+      data: { currentVersionId: fv1.id },
+    });
+
     // Вариант 2: активный, переопределенная цена 500 (priceOverride)
     const var2 = await prisma.productVariant.create({
       data: {
@@ -164,6 +189,31 @@ test("Cart & Orders E2E: Full Shopping Cart and Checkout Flow with PostgreSQL", 
       },
     });
     variant2Id = var2.id;
+
+    // Прикрепляем готовые PDF-выкройки к var2 для проверки оформления
+    const df2 = await prisma.digitalFile.create({
+      data: {
+        variantId: var2.id,
+        title: "Выкройка Silk Var2 A4",
+        isActive: true,
+      },
+    });
+    const fv2 = await prisma.fileVersion.create({
+      data: {
+        digitalFileId: df2.id,
+        versionNumber: 1,
+        s3Bucket: "lekalo-patterns",
+        s3Key: `patterns/${var2.id}/silk-var2-a4.pdf`,
+        originalFileName: "silk-var2-a4.pdf",
+        fileSizeBytes: BigInt(2048),
+        mimeType: "application/pdf",
+        checksumSha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      },
+    });
+    await prisma.digitalFile.update({
+      where: { id: df2.id },
+      data: { currentVersionId: fv2.id },
+    });
 
     // Вариант 3: неактивный вариант опубликованного товара
     const var3 = await prisma.productVariant.create({
@@ -628,6 +678,30 @@ test("Cart & Orders E2E: Full Shopping Cart and Checkout Flow with PostgreSQL", 
     }
 
     if (activeProductId) {
+      const activeVars = await prisma.productVariant.findMany({
+        where: { productId: activeProductId },
+        select: { id: true },
+      });
+      const varIds = activeVars.map((v) => v.id);
+      if (varIds.length > 0) {
+        const dfs = await prisma.digitalFile.findMany({
+          where: { variantId: { in: varIds } },
+          select: { id: true },
+        });
+        const dfIds = dfs.map((d) => d.id);
+        if (dfIds.length > 0) {
+          await prisma.digitalFile.updateMany({
+            where: { id: { in: dfIds } },
+            data: { currentVersionId: null },
+          });
+          await prisma.fileVersion.deleteMany({
+            where: { digitalFileId: { in: dfIds } },
+          });
+          await prisma.digitalFile.deleteMany({
+            where: { id: { in: dfIds } },
+          });
+        }
+      }
       await prisma.productVariant.deleteMany({ where: { productId: activeProductId } });
       await prisma.product.delete({ where: { id: activeProductId } }).catch(() => {});
     }

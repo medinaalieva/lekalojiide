@@ -293,7 +293,15 @@ export class PaymentsService {
           payments: {
             orderBy: { createdAt: "desc" },
           },
-          items: true,
+          items: {
+            include: {
+              variant: {
+                include: {
+                  size: true,
+                },
+              },
+            },
+          },
         },
       });
 
@@ -416,17 +424,93 @@ export class PaymentsService {
 
         if (targetUserId && order.items && order.items.length > 0) {
           for (const item of order.items) {
-            await tx.purchaseEntitlement.upsert({
-              where: { orderItemId: item.id },
-              create: {
-                userId: targetUserId,
-                orderItemId: item.id,
-                variantId: item.productVariantId,
-                status: EntitlementStatus.ACTIVE,
-                downloadCount: 0,
-              },
-              update: {}, // Идемпотентность: повторный вызов не дублирует права
-            });
+            const variant = item.variant;
+            const isBundle = variant?.size?.code === "ALL";
+
+            if (isBundle) {
+              // Комплект ALL: находим все размеры этого товара для выбранного роста и формата
+              const childVariants = await tx.productVariant.findMany({
+                where: {
+                  productId: variant.productId,
+                  heightId: variant.heightId,
+                  formatId: variant.formatId,
+                  isActive: true,
+                  size: { code: { not: "ALL" } },
+                },
+              });
+
+              for (const cVar of childVariants) {
+                await tx.purchaseEntitlement.upsert({
+                  where: {
+                    user_variant_unique: {
+                      userId: targetUserId,
+                      variantId: cVar.id,
+                    },
+                  },
+                  create: {
+                    userId: targetUserId,
+                    orderItemId: item.id,
+                    variantId: cVar.id,
+                    status: EntitlementStatus.ACTIVE,
+                    downloadCount: 0,
+                  },
+                  update: {
+                    status: EntitlementStatus.ACTIVE,
+                    orderItemId: item.id,
+                    updatedAt: new Date(),
+                  },
+                });
+              }
+
+              // Если для самого варианта ALL загружен отдельный производственный PDF
+              const hasAllFile = await tx.digitalFile.findFirst({
+                where: { variantId: variant.id, isActive: true },
+              });
+              if (hasAllFile) {
+                await tx.purchaseEntitlement.upsert({
+                  where: {
+                    user_variant_unique: {
+                      userId: targetUserId,
+                      variantId: variant.id,
+                    },
+                  },
+                  create: {
+                    userId: targetUserId,
+                    orderItemId: item.id,
+                    variantId: variant.id,
+                    status: EntitlementStatus.ACTIVE,
+                    downloadCount: 0,
+                  },
+                  update: {
+                    status: EntitlementStatus.ACTIVE,
+                    orderItemId: item.id,
+                    updatedAt: new Date(),
+                  },
+                });
+              }
+            } else {
+              // Обычная покупка одного размера
+              await tx.purchaseEntitlement.upsert({
+                where: {
+                  user_variant_unique: {
+                    userId: targetUserId,
+                    variantId: item.productVariantId,
+                  },
+                },
+                create: {
+                  userId: targetUserId,
+                  orderItemId: item.id,
+                  variantId: item.productVariantId,
+                  status: EntitlementStatus.ACTIVE,
+                  downloadCount: 0,
+                },
+                update: {
+                  status: EntitlementStatus.ACTIVE,
+                  orderItemId: item.id,
+                  updatedAt: new Date(),
+                },
+              });
+            }
           }
         }
 
@@ -475,7 +559,8 @@ export class PaymentsService {
       });
 
       return { received: true, status: "IGNORED" };
-    });
+    },
+    { maxWait: 15000, timeout: 25000 });
   }
 
   /**
@@ -528,6 +613,67 @@ export class PaymentsService {
         totalItems,
         totalPages: Math.ceil(totalItems / limit),
       },
+    };
+  }
+
+  /**
+   * Эмуляция ответа эквайринга в тестовом окружении с генерацией валидного подписанного вебхука
+   */
+  async simulatePaymentResult(
+    user: AccessTokenPayload,
+    orderId: string,
+    targetStatus: "SUCCEEDED" | "FAILED" | "CANCELED"
+  ) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        payments: {
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundError("ORDER_NOT_FOUND", "Заказ не найден");
+    }
+
+    const isStaff = user.role === Role.ADMIN || user.role === Role.CONTENT_MANAGER;
+    if (order.userId !== user.sub && !isStaff) {
+      throw new ForbiddenError("FORBIDDEN", "Доступ к чужому заказу запрещен");
+    }
+
+    const payment = order.payments[0];
+    if (!payment) {
+      throw new NotFoundError("PAYMENT_NOT_FOUND", "Платёжная запись не найдена");
+    }
+
+    if (order.status === OrderStatus.PAID && payment.status === PaymentStatus.SUCCEEDED) {
+      return { success: true, message: "Заказ уже оплачен", status: PaymentStatus.SUCCEEDED };
+    }
+
+    // Формируем полезную нагрузку вебхука
+    const payload = {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      paymentId: payment.id,
+      externalId: payment.externalId || `mock_ext_${payment.idempotencyKey}`,
+      idempotencyKey: payment.idempotencyKey,
+      amount: Number(payment.amount),
+      currency: payment.currency,
+      status: targetStatus,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Генерируем эталонную HMAC-SHA256 подпись
+    const signature = (this.gateway as MockPaymentGateway).generateSignature(payload);
+
+    // Вызываем стандартный верифицированный обработчик вебхуков
+    const result = await this.handleWebhook("mock", { "x-signature": signature }, payload);
+
+    return {
+      success: true,
+      result,
+      status: targetStatus,
     };
   }
 }

@@ -1,4 +1,10 @@
 import "reflect-metadata";
+
+// Глобальная поддержка сериализации BigInt в JSON для моделей Prisma
+(BigInt.prototype as any).toJSON = function () {
+  const intVal = Number(this);
+  return Number.isSafeInteger(intVal) ? intVal : this.toString();
+};
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, NestFastifyApplication } from "@nestjs/platform-fastify";
 import fastifyCookie from "@fastify/cookie";
@@ -12,6 +18,7 @@ import { AppExceptionFilter } from "./common/filters/app-exception.filter";
 async function bootstrap(): Promise<NestFastifyApplication> {
   const adapter = new FastifyAdapter({
     logger: process.env.NODE_ENV === "development",
+    bodyLimit: 35 * 1024 * 1024, // 35 MB body limit для загрузки фото и PDF-выкроек
   });
 
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter);

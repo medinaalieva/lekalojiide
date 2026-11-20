@@ -248,7 +248,11 @@ export default function CabinetPage() {
                               <span className="text-atelier-muted font-normal">
                                 ({[
                                   itemSize ? `${itemSize} RU` : "",
-                                  itemHeight ? `${itemHeight} см` : "",
+                                  itemHeight
+                                    ? itemHeight.includes("см")
+                                      ? itemHeight
+                                      : `${itemHeight} см`
+                                    : "",
                                   itemFormat || "",
                                 ]
                                   .filter(Boolean)

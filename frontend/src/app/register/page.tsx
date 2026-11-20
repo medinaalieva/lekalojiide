@@ -2,14 +2,31 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "../../lib/auth-context";
 import { Button } from "../../components/ui/Button";
 import { AlertCircle, Lock, Mail, User, Phone } from "lucide-react";
 
+function getSafeRedirectUrl(param: string | null): string {
+  if (!param) return "/cabinet";
+  if (
+    param.startsWith("/") &&
+    !param.startsWith("//") &&
+    !param.includes("\\") &&
+    !param.includes("://")
+  ) {
+    return param;
+  }
+  return "/cabinet";
+}
+
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { register } = useAuth();
+
+  const redirectParam = searchParams.get("redirect");
+  const targetRedirect = getSafeRedirectUrl(redirectParam);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -65,7 +82,7 @@ export default function RegisterPage() {
         lastName: lastName.trim() || undefined,
         phone: phone.trim() || undefined,
       });
-      router.push("/cabinet");
+      router.push(targetRedirect);
     } catch (err: any) {
       const newFieldErrors: Record<string, string> = {};
 
@@ -245,7 +262,7 @@ export default function RegisterPage() {
           <Button
             type="submit"
             size="lg"
-            className="w-full text-sm mt-2"
+            className="w-full text-sm mt-2 min-h-[44px]"
             isLoading={isLoading}
             disabled={isLoading}
           >
@@ -256,7 +273,11 @@ export default function RegisterPage() {
         <div className="pt-4 border-t border-atelier-border text-center text-xs text-atelier-muted">
           Уже есть аккаунт?{" "}
           <Link
-            href="/login"
+            href={
+              redirectParam
+                ? `/login?redirect=${encodeURIComponent(redirectParam)}`
+                : "/login"
+            }
             className="text-brand-800 hover:text-brand-950 font-semibold underline"
           >
             Войти

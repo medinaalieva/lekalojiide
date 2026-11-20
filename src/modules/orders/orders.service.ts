@@ -5,12 +5,14 @@ import { PrismaService } from "../../lib/prisma.service";
 import { prisma as defaultPrisma } from "../../lib/prisma";
 import { AccessTokenPayload } from "../../utils/jwt";
 import { CheckoutDto, OrderQueryDto } from "./orders.dto";
+import { calculateEffectivePrice } from "../../utils/pricing";
 import {
   NotFoundError,
   BadRequestError,
   ForbiddenError,
   UnprocessableEntityError,
 } from "../../utils/errors";
+import { assertPatternAvailable } from "../../utils/pattern-availability";
 
 export interface OrderItemResponse {
   id: string;
@@ -57,7 +59,8 @@ export class OrdersService {
    * Оформление заказа из корзины авторизованного покупателя с транзакционной гарантией целостности
    */
   async checkout(user: AccessTokenPayload, dto: CheckoutDto) {
-    return await this.prisma.$transaction(async (tx) => {
+    return await this.prisma.$transaction(
+      async (tx) => {
       // 1. Получаем корзину покупателя вместе с позициями, вариантами и товарами
       const cart = await tx.cart.findFirst({
         where: { userId: user.sub },
@@ -70,6 +73,13 @@ export class OrdersService {
                   size: true,
                   height: true,
                   format: true,
+                  digitalFiles: {
+                    where: { isActive: true },
+                    include: {
+                      currentVersion: true,
+                      versions: true,
+                    },
+                  },
                 },
               },
             },
@@ -82,7 +92,7 @@ export class OrdersService {
         throw new UnprocessableEntityError("CART_EMPTY", "Невозможно оформить заказ с пустой корзиной");
       }
 
-      // 2. Повторная проверка активности всех товаров и вариантов в корзине
+      // 2. Повторная проверка активности всех товаров, вариантов и наличия готовых PDF-выкроек в корзине
       for (const item of cart.items) {
         if (!item.variant.product.isActive) {
           throw new BadRequestError(
@@ -96,6 +106,30 @@ export class OrdersService {
             `Вариант «${item.variant.sku}» для выкройки «${item.variant.product.title}» недоступен для заказа`
           );
         }
+        // Защита: проверяем наличие действующего производственного PDF-лекала
+        let childVariants: any[] | undefined = undefined;
+        if (item.variant.size?.code === "ALL") {
+          childVariants = await tx.productVariant.findMany({
+            where: {
+              productId: item.variant.productId,
+              heightId: item.variant.heightId,
+              formatId: item.variant.formatId,
+              isActive: true,
+              size: { code: { not: "ALL" } },
+            },
+            include: {
+              digitalFiles: {
+                where: { isActive: true },
+                include: {
+                  currentVersion: true,
+                  versions: true,
+                },
+              },
+            },
+          });
+        }
+
+        assertPatternAvailable(item.variant, undefined, childVariants);
       }
 
       // 3. Данные покупателя из профиля или переданного DTO
@@ -112,8 +146,18 @@ export class OrdersService {
       let total = 0;
       const orderItemsData = cart.items.map((item) => {
         const v = item.variant;
-        const price =
-          v.priceOverride !== null ? Number(v.priceOverride) : Number(v.product.basePrice);
+        const isBundleVariant = v.size.code === "ALL";
+        const pricing = calculateEffectivePrice(
+          {
+            basePrice: v.product.basePrice,
+            discountPrice: v.product.discountPrice,
+            discountFrom: v.product.discountFrom,
+            discountUntil: v.product.discountUntil,
+            bundlePrice: v.product.bundlePrice,
+          },
+          { isBundleVariant, priceOverride: v.priceOverride }
+        );
+        const price = pricing.currentPrice;
         total += price;
 
         const productSnapshot = {
@@ -126,6 +170,9 @@ export class OrdersService {
           height: { id: v.height.id, code: v.height.code, label: v.height.label },
           format: { id: v.format.id, code: v.format.code, label: v.format.label },
           price,
+          originalPrice: pricing.originalPrice,
+          isDiscountActive: pricing.isDiscountActive,
+          isBundle: pricing.isBundle,
           currency: "KGS",
         };
 
@@ -186,7 +233,8 @@ export class OrdersService {
         itemsCount: order.items.length,
         createdAt: order.createdAt.toISOString(),
       };
-    });
+    },
+    { maxWait: 15000, timeout: 25000 });
   }
 
   /**

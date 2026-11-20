@@ -3,11 +3,16 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaService } from "../../lib/prisma.service";
 import { prisma as defaultPrisma } from "../../lib/prisma";
 import { AddToCartDto, UpdateCartItemDto } from "./cart.dto";
+import { calculateEffectivePrice } from "../../utils/pricing";
 import {
   NotFoundError,
   BadRequestError,
   ConflictError,
 } from "../../utils/errors";
+import {
+  checkPatternAvailability,
+  assertPatternAvailable,
+} from "../../utils/pattern-availability";
 
 export interface CartResponseItem {
   id: string;
@@ -21,8 +26,13 @@ export interface CartResponseItem {
   height: { id: string; code: string; label: string };
   format: { id: string; code: string; label: string };
   price: number;
+  originalPrice?: number;
+  isDiscountActive?: boolean;
+  isBundle?: boolean;
   currency: string;
   isAvailable: boolean;
+  unavailableReason?: string;
+  unavailableMessage?: string;
   createdAt: string;
 }
 
@@ -81,14 +91,44 @@ export class CartService {
     const items: CartResponseItem[] = (cart.items || []).map((item: any) => {
       const v = item.variant;
       const product = v.product;
-      const price =
-        v.priceOverride !== null ? Number(v.priceOverride) : Number(product.basePrice);
+      const isBundleVariant = v.size.code === "ALL";
+      const pricing = calculateEffectivePrice(
+        {
+          basePrice: product.basePrice,
+          discountPrice: product.discountPrice,
+          discountFrom: product.discountFrom,
+          discountUntil: product.discountUntil,
+          bundlePrice: product.bundlePrice,
+        },
+        { isBundleVariant, priceOverride: v.priceOverride }
+      );
+      const price = pricing.currentPrice;
       total += price;
 
       const coverImage =
         product.images?.find((img: any) => img.isCover)?.imageUrl ||
         product.images?.[0]?.imageUrl ||
         null;
+
+      let childVariants: any[] | undefined = undefined;
+      if (isBundleVariant && product.variants) {
+        childVariants = product.variants.filter(
+          (c: any) =>
+            c.size?.code !== "ALL" &&
+            c.heightId === v.heightId &&
+            c.formatId === v.formatId &&
+            c.isActive
+        );
+      }
+
+      const availCheck = checkPatternAvailability(
+        {
+          ...v,
+          product: { title: product.title, isActive: product.isActive },
+        },
+        childVariants
+      );
+      const isAvailable = Boolean(v.isActive && product.isActive && availCheck.isAvailable);
 
       return {
         id: item.id,
@@ -102,8 +142,13 @@ export class CartService {
         height: { id: v.height.id, code: v.height.code, label: v.height.label },
         format: { id: v.format.id, code: v.format.code, label: v.format.label },
         price,
+        originalPrice: pricing.originalPrice,
+        isDiscountActive: pricing.isDiscountActive,
+        isBundle: pricing.isBundle,
         currency: "KGS",
-        isAvailable: Boolean(v.isActive && product.isActive),
+        isAvailable,
+        unavailableReason: availCheck.reason,
+        unavailableMessage: availCheck.message,
         createdAt: item.createdAt.toISOString(),
       };
     });
@@ -138,11 +183,33 @@ export class CartService {
                     images: {
                       orderBy: [{ isCover: "desc" }, { displayOrder: "asc" }],
                     },
+                    variants: {
+                      where: { isActive: true },
+                      include: {
+                        size: true,
+                        height: true,
+                        format: true,
+                        digitalFiles: {
+                          where: { isActive: true },
+                          include: {
+                            currentVersion: true,
+                            versions: true,
+                          },
+                        },
+                      },
+                    },
                   },
                 },
                 size: true,
                 height: true,
                 format: true,
+                digitalFiles: {
+                  where: { isActive: true },
+                  include: {
+                    currentVersion: true,
+                    versions: true,
+                  },
+                },
               },
             },
           },
@@ -161,7 +228,19 @@ export class CartService {
     // 1. Проверяем существование варианта
     const variant = await this.prisma.productVariant.findUnique({
       where: { id: dto.variantId },
-      include: { product: true },
+      include: {
+        product: true,
+        size: true,
+        height: true,
+        format: true,
+        digitalFiles: {
+          where: { isActive: true },
+          include: {
+            currentVersion: true,
+            versions: true,
+          },
+        },
+      },
     });
 
     if (!variant) {
@@ -177,6 +256,31 @@ export class CartService {
     if (!variant.isActive) {
       throw new BadRequestError("VARIANT_INACTIVE", "Выбранный вариант выкройки недоступен для заказа");
     }
+
+    // 3.5. Проверяем наличие готового производственного PDF-лекала
+    let childVariants: any[] | undefined = undefined;
+    if (variant.size?.code === "ALL") {
+      childVariants = await this.prisma.productVariant.findMany({
+        where: {
+          productId: variant.productId,
+          heightId: variant.heightId,
+          formatId: variant.formatId,
+          isActive: true,
+          size: { code: { not: "ALL" } },
+        },
+        include: {
+          digitalFiles: {
+            where: { isActive: true },
+            include: {
+              currentVersion: true,
+              versions: true,
+            },
+          },
+        },
+      });
+    }
+
+    assertPatternAvailable(variant, undefined, childVariants);
 
     // 4. Проверяем принадлежность варианта указанной выкройке (если productId передан)
     if (dto.productId && variant.productId !== dto.productId) {
@@ -249,7 +353,19 @@ export class CartService {
     // 2. Ищем новый вариант
     const newVariant = await this.prisma.productVariant.findUnique({
       where: { id: dto.newVariantId },
-      include: { product: true },
+      include: {
+        product: true,
+        size: true,
+        height: true,
+        format: true,
+        digitalFiles: {
+          where: { isActive: true },
+          include: {
+            currentVersion: true,
+            versions: true,
+          },
+        },
+      },
     });
 
     if (!newVariant) {
@@ -263,6 +379,31 @@ export class CartService {
     if (!newVariant.isActive) {
       throw new BadRequestError("VARIANT_INACTIVE", "Выбранный вариант выкройки недоступен");
     }
+
+    // Проверяем наличие готового производственного PDF-лекала
+    let newChildVariants: any[] | undefined = undefined;
+    if (newVariant.size?.code === "ALL") {
+      newChildVariants = await this.prisma.productVariant.findMany({
+        where: {
+          productId: newVariant.productId,
+          heightId: newVariant.heightId,
+          formatId: newVariant.formatId,
+          isActive: true,
+          size: { code: { not: "ALL" } },
+        },
+        include: {
+          digitalFiles: {
+            where: { isActive: true },
+            include: {
+              currentVersion: true,
+              versions: true,
+            },
+          },
+        },
+      });
+    }
+
+    assertPatternAvailable(newVariant, undefined, newChildVariants);
 
     // Вариант должен принадлежать той же выкройке
     if (newVariant.productId !== cartItem.variant.productId) {

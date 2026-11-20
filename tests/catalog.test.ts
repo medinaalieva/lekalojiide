@@ -76,9 +76,9 @@ test("DTO Validation: CatalogQuerySchema coerces numbers and applies defaults", 
   assert.equal(query.search, "Шелк");
   assert.equal(query.sort, "price_asc");
 
-  // Max limit boundary: max 50
+  // Max limit boundary: max 100
   const maxLimit = CatalogQuerySchema.safeParse({
-    limit: "100",
+    limit: "101",
   });
   assert.equal(maxLimit.success, false);
 });

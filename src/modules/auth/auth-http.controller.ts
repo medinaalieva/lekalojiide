@@ -12,6 +12,7 @@ import {
 } from "@nestjs/common";
 import { FastifyRequest, FastifyReply } from "fastify";
 import { AuthService } from "./auth.service";
+import { PasswordResetService } from "./password-reset.service";
 import { extractAuthUser } from "./auth.guard";
 import {
   getRefreshTokenCookieOptions,
@@ -27,7 +28,53 @@ import { ForbiddenError } from "../../utils/errors";
  */
 @Controller("auth")
 export class AuthHttpController {
-  constructor(private readonly authService: AuthService) {}
+  private resetService: PasswordResetService;
+
+  constructor(
+    private readonly authService: AuthService,
+    passwordResetService?: PasswordResetService
+  ) {
+    this.resetService =
+      passwordResetService || new PasswordResetService(undefined, this.authService);
+  }
+
+  /**
+   * POST /api/v1/auth/forgot-password
+   * Запрос на восстановление пароля по email
+   */
+  @Post("forgot-password")
+  @HttpCode(HttpStatus.OK)
+  async forgotPassword(
+    @Body() body: unknown,
+    @Req() req: FastifyRequest
+  ) {
+    this.checkOrigin(req);
+    const result = await this.resetService.requestReset(body, this.getIp(req));
+    return {
+      success: true,
+      data: result,
+      meta: { timestamp: new Date().toISOString() },
+    };
+  }
+
+  /**
+   * POST /api/v1/auth/reset-password
+   * Установка нового пароля по одноразовому криптографическому токену
+   */
+  @Post("reset-password")
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(
+    @Body() body: unknown,
+    @Req() req: FastifyRequest
+  ) {
+    this.checkOrigin(req);
+    const result = await this.resetService.resetPassword(body, this.getIp(req));
+    return {
+      success: true,
+      data: result,
+      meta: { timestamp: new Date().toISOString() },
+    };
+  }
 
   /**
    * POST /api/v1/auth/register

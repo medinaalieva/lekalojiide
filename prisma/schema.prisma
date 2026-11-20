@@ -100,6 +100,16 @@ model Product {
   difficultyLevel  DifficultyLevel @default(INTERMEDIATE) @map("difficulty_level")
   fabricDetails    Json?           @map("fabric_details")
   isActive         Boolean         @default(true) @map("is_active")
+  bundlePrice          Decimal?        @map("bundle_price") @db.Decimal(12, 2)
+  hasBundleOption      Boolean         @default(true) @map("has_bundle_option")
+  discountPrice        Decimal?        @map("discount_price") @db.Decimal(12, 2)
+  discountFrom         DateTime?       @map("discount_from") @db.Timestamptz
+  discountUntil        DateTime?       @map("discount_until") @db.Timestamptz
+  isNew                Boolean         @default(false) @map("is_new")
+  isBestseller         Boolean         @default(false) @map("is_bestseller")
+  isPopular            Boolean         @default(false) @map("is_popular")
+  technicalDrawingUrl  String?         @map("technical_drawing_url") @db.VarChar(1000)
+  videoUrl             String?         @map("video_url") @db.VarChar(1000)
   createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -160,19 +170,28 @@ model Height {
   id           String           @id @default(uuid()) @db.Uuid
   code         String           @unique @db.VarChar(30)
   label        String           @db.VarChar(100)
+  minHeight    Int?             @map("min_height")
+  maxHeight    Int?             @map("max_height")
   displayOrder Int              @default(0) @map("display_order")
+  isActive     Boolean          @default(true) @map("is_active")
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   variants     ProductVariant[]
 
   @@map("heights")
 }
 
 model Format {
-  id           String           @id @default(uuid()) @db.Uuid
-  code         String           @unique @db.VarChar(30)
-  label        String           @db.VarChar(100)
-  description  String?          @db.Text
-  displayOrder Int              @default(0) @map("display_order")
-  variants     ProductVariant[]
+  id            String           @id @default(uuid()) @db.Uuid
+  code          String           @unique @db.VarChar(30)
+  label         String           @db.VarChar(100)
+  description   String?          @db.Text
+  maxPrintWidth Int?             @map("max_print_width")
+  displayOrder  Int              @default(0) @map("display_order")
+  isActive      Boolean          @default(true) @map("is_active")
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  variants      ProductVariant[]
 
   @@map("formats")
 }
@@ -329,7 +348,7 @@ model OrderItem {
   createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
 
   // Связи
-  entitlement      PurchaseEntitlement?
+  entitlements     PurchaseEntitlement[]
   refundItems      RefundItem[]
 
   @@map("order_items")
@@ -447,7 +466,7 @@ model PurchaseEntitlement {
   id            String            @id @default(uuid()) @db.Uuid
   userId        String            @map("user_id") @db.Uuid
   user          User              @relation(fields: [userId], references: [id], onDelete: Restrict)
-  orderItemId   String            @unique @map("order_item_id") @db.Uuid
+  orderItemId   String            @map("order_item_id") @db.Uuid
   orderItem     OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
   variantId     String            @map("variant_id") @db.Uuid
   variant       ProductVariant    @relation(fields: [variantId], references: [id], onDelete: Restrict)
@@ -461,6 +480,8 @@ model PurchaseEntitlement {
   // Связи
   downloadLogs  DownloadLog[]
 
+  @@unique([userId, variantId], name: "user_variant_unique")
+  @@index([orderItemId])
   @@map("purchase_entitlements")
 }
 
